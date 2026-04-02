@@ -243,72 +243,96 @@ async def process_order(
 
 
 # ── 이카운트 판매 전표 등록 ─────────────────────
+# PO_ 파일을 업로드하면 자동으로 변환 후 이카운트에 전송
 @app.post("/api/send-to-ecount")
 async def send_to_ecount(
     file:       UploadFile = File(...),
-    barcodeCol: str        = Form("상품바코드"),
-    codeCol:    str        = Form("상품코드"),
+    staff_code: str        = Form(""),   # 담당자 코드
 ):
     print(f"\n--- 📤 이카운트 전송 [{file.filename}] 시작 ---")
+    today = datetime.today().strftime("%Y%m%d")
     barcode_to_code, _ = load_master()
 
     contents = await file.read()
-    df = pd.read_excel(io.BytesIO(contents), dtype=str)
+    try:
+        df = pd.read_excel(io.BytesIO(contents), dtype=str)
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"detail": f"파일 읽기 실패: {str(e)}"})
+
     df.columns = df.columns.str.strip()
     df = df.fillna("")
 
-    target_bc = barcodeCol.strip()
-    if target_bc not in df.columns:
-        return JSONResponse(status_code=400, content={"detail": f"'{target_bc}' 열이 없습니다."})
+    # 필수 컬럼 확인
+    for col in ["상품바코드", "발주번호", "물류센터"]:
+        if col not in df.columns:
+            return JSONResponse(status_code=400, content={"detail": f"'{col}' 열이 없습니다. PO 파일인지 확인하세요."})
 
-    # 바코드 → 상품코드 변환
-    df[target_bc] = df[target_bc].str.strip().str.replace(r"\.0$", "", regex=True)
-    df[codeCol]   = df[target_bc].map(lambda bc: barcode_to_code.get(bc, ""))
+    # ① 바코드 → 품목코드 변환
+    df["상품바코드"] = df["상품바코드"].str.strip().str.replace(r"\.0$", "", regex=True)
+    df["_품목코드"] = df["상품바코드"].map(lambda bc: barcode_to_code.get(bc, ""))
 
-    # 확정수량이 있는 행만 (0이 아닌 것)
+    # ② 수량 컬럼 선택 (확정수량 우선, 없으면 발주수량)
     qty_col = "확정수량" if "확정수량" in df.columns else "발주수량"
-    df[qty_col] = df[qty_col].str.strip()
-    valid = df[(df[codeCol] != "") & (df[qty_col] != "") & (df[qty_col] != "0")].copy()
+    df[qty_col] = df[qty_col].str.strip().str.replace(",", "")
+
+    # 유효 행만 (품목코드 있고, 수량 > 0)
+    valid = df[
+        (df["_품목코드"] != "") &
+        (df[qty_col] != "") &
+        (df[qty_col] != "0")
+    ].copy()
+
+    unmatched = int((df["_품목코드"] == "").sum())
 
     if valid.empty:
-        return JSONResponse(status_code=400, content={"detail": "전송할 유효한 데이터가 없습니다."})
+        return JSONResponse(status_code=400, content={
+            "detail": f"전송할 유효한 데이터가 없습니다. (바코드 미매칭: {unmatched}건)"
+        })
 
-    # 판매일자 결정 (입고예정일 또는 오늘)
-    def parse_date(val):
-        for fmt in ["%Y-%m-%d", "%Y/%m/%d", "%Y%m%d"]:
-            try:
-                return datetime.strptime(str(val)[:10], fmt).strftime("%Y%m%d")
-            except:
-                pass
-        return datetime.today().strftime("%Y%m%d")
+    # ③ 물류센터 ㄱ~ㅎ 순서 정렬 → 발주번호 순
+    valid = valid.sort_values(["물류센터", "발주번호"]).reset_index(drop=True)
 
-    io_date = datetime.today().strftime("%Y%m%d")
-    doc_no  = valid["발주번호"].iloc[0] if "발주번호" in valid.columns else ""
+    # ④ 발주번호별 순번 할당 (같은 발주번호 = 같은 전표)
+    doc_to_ser: dict = {}
+    ser_counter = 1
+    for doc_no in valid["발주번호"]:
+        if doc_no not in doc_to_ser:
+            doc_to_ser[doc_no] = str(ser_counter)
+            ser_counter += 1
 
-    # BulkDatas 리스트 구성
+    # ⑤ BulkDatas 리스트 구성
     bulk_list = []
-    for i, (_, row) in enumerate(valid.iterrows(), 1):
-        qty = row[qty_col].replace(",", "").strip()
-        price     = row.get("매입가", "").replace(",", "").strip()
-        supply    = row.get("공급가", "").replace(",", "").strip()
-        vat       = row.get("부가세", "").replace(",", "").strip()
+    for _, row in valid.iterrows():
+        doc_no    = str(row["발주번호"]).strip()
+        warehouse = str(row["물류센터"]).strip()
+        qty_str   = str(row[qty_col]).replace(",", "").strip()
+        supply_str = str(row.get("총발주 매입금", "")).replace(",", "").strip()
+        vat_str    = str(row.get("부가세", "")).replace(",", "").strip()
+
+        # 단가 = 공급가액 / 수량 (R = T / Q)
+        try:
+            price_val = round(float(supply_str) / float(qty_str)) if supply_str and qty_str and float(qty_str) != 0 else 0
+        except:
+            price_val = 0
 
         bulk_list.append({"BulkDatas": {
-            "UPLOAD_SER_NO": "1",
-            "IO_DATE":       io_date,
-            "CUST":          ECOUNT_CONFIG["CUST"],
-            "WH_CD":         ECOUNT_CONFIG["WH_CD"],
-            "DOC_NO":        doc_no,
-            "PROD_CD":       row[codeCol],
-            "PROD_DES":      row.get("상품이름", ""),
-            "QTY":           qty,
-            "PRICE":         price,
-            "SUPPLY_AMT":    supply,
-            "VAT_AMT":       vat,
-            "REMARKS":       f"쿠팡 발주 {doc_no}",
+            "UPLOAD_SER_NO": doc_to_ser[doc_no],
+            "IO_DATE":       today,
+            "CUST":          "202308091",       # 거래처코드 고정
+            "WH_CD":         "30",              # 출하창고 고정
+            "STAFF":         staff_code,         # 담당자 코드
+            "PROD_CD":       str(row["_품목코드"]).strip(),
+            "PROD_DES":      str(row.get("상품이름", "")).strip(),
+            "QTY":           qty_str,
+            "PRICE":         str(price_val),
+            "SUPPLY_AMT":    supply_str,
+            "VAT_AMT":       vat_str,
+            "REMARKS":       f"{warehouse} - {doc_no}",  # 예) 안산3 - 128117514
         }})
 
-    # 세션 발급 및 전송
+    print(f"📦 전송 항목: {len(bulk_list)}개 | 미매칭: {unmatched}개")
+
+    # ⑥ 세션 발급 및 전송
     try:
         session_id, zone = await get_ecount_session()
     except Exception as e:
@@ -323,7 +347,7 @@ async def send_to_ecount(
     print(f"📨 이카운트 응답: {result}")
 
     status   = result.get("Status")
-    data     = result.get("Data", {})
+    data     = result.get("Data") or {}
     success  = data.get("SuccessCnt", 0)
     fail     = data.get("FailCnt", 0)
     slip_nos = data.get("SlipNos", [])
@@ -339,7 +363,7 @@ async def send_to_ecount(
         "fail":      fail,
         "slip_nos":  slip_nos,
         "errors":    errors,
-        "unmatched": int((df[codeCol] == "").sum()),
+        "unmatched": unmatched,
     })
 
 

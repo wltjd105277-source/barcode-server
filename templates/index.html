@@ -72,6 +72,7 @@ header p  { font-size: 12px; opacity: 0.75; margin-top: 3px; }
 <div class="tabs">
   <button class="tab-btn active" onclick="switchTab('po', this)">📋 PO 파일 처리</button>
   <button class="tab-btn"        onclick="switchTab('order', this)">🛒 주문서 바코드 채우기</button>
+  <button class="tab-btn"        onclick="switchTab('ecount', this)">📤 이카운트 전송</button>
 </div>
 
 
@@ -112,13 +113,11 @@ header p  { font-size: 12px; opacity: 0.75; margin-top: 3px; }
   <div class="card">
     <div class="card-title"><span class="badge">3</span> 실행</div>
     <button class="run-btn" id="poRunBtn" onclick="runPO()" disabled>▶&nbsp; 상품코드 변환 후 다운로드</button>
-    <button class="ecount-btn" id="ecountBtn" onclick="sendToEcount()" disabled>📤&nbsp; 이카운트 판매 전표 등록</button>
     <div class="stats hidden" id="poStats">
       <div class="stat s1"><div class="n" id="poT">0</div><div class="l">전체</div></div>
       <div class="stat s2"><div class="n" id="poM">0</div><div class="l">변환됨</div></div>
       <div class="stat s3"><div class="n" id="poN">0</div><div class="l">미매칭</div></div>
     </div>
-    <div class="ecount-result hidden" id="ecountResult"></div>
   </div>
 
   <div class="card">
@@ -187,6 +186,65 @@ header p  { font-size: 12px; opacity: 0.75; margin-top: 3px; }
 </div>
 
 
+<!-- ══════════════ 이카운트 탭 ══════════════ -->
+<div class="tab-pane" id="tab-ecount">
+<div class="container">
+
+  <div class="card">
+    <div class="card-title"><span class="badge">ℹ</span> 안내</div>
+    <div class="info-bar">📋 &nbsp;<strong>PO_로 시작하는 파일</strong>을 올리면 바코드→품목코드 변환, 물류센터 ㄱ~ㅎ 정렬 후 이카운트에 자동 전송됩니다.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="badge">1</span> PO 파일 선택</div>
+    <div class="upload-zone" id="ecountZone" onclick="document.getElementById('ecountFileInput').click()">
+      <div class="icon">📂</div>
+      <strong>PO_ 파일을 클릭하거나 드래그하세요</strong>
+      <p>PO_FOR_CONFIRM(발주번호).xlsx 형식</p>
+    </div>
+    <input type="file" id="ecountFileInput" accept=".xlsx,.xls" style="display:none">
+    <div id="ecountFileTag" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="badge">2</span> 설정</div>
+    <div class="grid2">
+      <div class="field">
+        <label>담당자 코드</label>
+        <input type="text" id="staffCode" placeholder="담당자 코드 입력">
+      </div>
+      <div class="field">
+        <label>거래처코드 (고정)</label>
+        <input type="text" value="202308091" disabled style="background:#F7FAFC;color:#718096;">
+      </div>
+    </div>
+    <div class="grid2" style="margin-top:10px;">
+      <div class="field">
+        <label>출하창고 (고정)</label>
+        <input type="text" value="30" disabled style="background:#F7FAFC;color:#718096;">
+      </div>
+      <div class="field">
+        <label>판매일자</label>
+        <input type="text" id="ioDate" placeholder="오늘 날짜 자동 입력" disabled style="background:#F7FAFC;color:#718096;">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="badge">3</span> 이카운트 전송</div>
+    <button class="ecount-btn" id="ecountSendBtn" onclick="sendToEcount()" disabled>📤&nbsp; 이카운트 판매 전표 등록</button>
+    <div class="ecount-result hidden" id="ecountResult"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="badge">✦</span> 처리 로그</div>
+    <div class="log-box" id="ecountLog"></div>
+  </div>
+
+</div>
+</div>
+
+
 <script>
 // ── 탭 전환 ─────────────────────────────────
 function switchTab(name, btn) {
@@ -198,10 +256,16 @@ function switchTab(name, btn) {
 
 // ── 마스터 정보 로드 ────────────────────────
 window.onload = async () => {
-  setupDrop("poZone",  "poFileInput",  handlePOFiles);
-  setupDrop("ordZone", "ordFileInput", files => handleOrderFile(files[0]));
-  document.getElementById("poFileInput").addEventListener("change",  e => { if (e.target.files.length) handlePOFiles(Array.from(e.target.files)); });
-  document.getElementById("ordFileInput").addEventListener("change", e => { if (e.target.files[0]) handleOrderFile(e.target.files[0]); });
+  setupDrop("poZone",     "poFileInput",     handlePOFiles);
+  setupDrop("ordZone",    "ordFileInput",    files => handleOrderFile(files[0]));
+  setupDrop("ecountZone", "ecountFileInput", files => handleEcountFile(files[0]));
+  document.getElementById("poFileInput").addEventListener("change",     e => { if (e.target.files.length) handlePOFiles(Array.from(e.target.files)); });
+  document.getElementById("ordFileInput").addEventListener("change",    e => { if (e.target.files[0]) handleOrderFile(e.target.files[0]); });
+  document.getElementById("ecountFileInput").addEventListener("change", e => { if (e.target.files[0]) handleEcountFile(e.target.files[0]); });
+
+  // 오늘 날짜 표시
+  const today = new Date();
+  document.getElementById("ioDate").placeholder = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,"0")}${String(today.getDate()).padStart(2,"0")} (자동)`;
 
   try {
     const res  = await fetch("/api/master-info");
@@ -350,26 +414,31 @@ function olog(msg, t = "i") {
 }
 
 // ══════════════════════════════════════
-// 이카운트 전송
+// 이카운트 탭
 // ══════════════════════════════════════
-async function sendToEcount() {
-  if (!poFiles.length) return alert("파일을 선택하세요.");
-  if (poFiles.length > 1) return alert("이카운트 전송은 파일 1개씩 처리합니다.\n첫 번째 파일만 전송합니다.");
+let ecountFile = null;
 
-  const file       = poFiles[0];
-  const barcodeCol = document.getElementById("poBarcodeCol").value.trim();
-  const codeCol    = document.getElementById("poCodeCol").value.trim();
-  const btn        = document.getElementById("ecountBtn");
-  const resultDiv  = document.getElementById("ecountResult");
+function handleEcountFile(file) {
+  ecountFile = file;
+  document.getElementById("ecountFileTag").innerHTML = `<span class="file-tag">📄 ${file.name}</span>`;
+  document.getElementById("ecountSendBtn").disabled = false;
+  elog(`파일 선택됨: ${file.name}`, "o");
+}
+
+async function sendToEcount() {
+  if (!ecountFile) return alert("파일을 선택하세요.");
+
+  const btn       = document.getElementById("ecountSendBtn");
+  const resultDiv = document.getElementById("ecountResult");
 
   btn.disabled = true; btn.textContent = "⏳ 이카운트 전송 중...";
   resultDiv.className = "ecount-result hidden";
-  plog(`📤 이카운트 전송 시작: ${file.name}`, "i");
+  elog(`📤 이카운트 전송 시작: ${ecountFile.name}`, "i");
 
+  const staffCode = document.getElementById("staffCode").value.trim();
   const fd = new FormData();
-  fd.append("file",       file);
-  fd.append("barcodeCol", barcodeCol);
-  fd.append("codeCol",    codeCol);
+  fd.append("file",       ecountFile);
+  fd.append("staff_code", staffCode);
 
   try {
     const res  = await fetch("/api/send-to-ecount", { method: "POST", body: fd });
@@ -377,7 +446,7 @@ async function sendToEcount() {
 
     if (!res.ok) throw new Error(data.detail || "서버 오류");
 
-    const isOk = data.status === "200" && data.fail === 0;
+    const isOk = String(data.status) === "200" && data.fail === 0;
     resultDiv.className = `ecount-result ${isOk ? "success" : "fail"}`;
     resultDiv.innerHTML = `
       <strong>${isOk ? "✅ 전표 등록 완료!" : "⚠️ 일부 실패"}</strong><br>
@@ -388,18 +457,25 @@ async function sendToEcount() {
     `;
     resultDiv.classList.remove("hidden");
 
-    plog(`${isOk ? "✅" : "⚠️"} 이카운트 결과 - 성공:${data.success} 실패:${data.fail}`, isOk ? "o" : "w");
-    if (data.slip_nos?.length) plog(`전표번호: ${data.slip_nos.join(", ")}`, "o");
-    if (data.errors?.length)  data.errors.forEach(e => plog(`❌ ${e}`, "e"));
+    elog(`${isOk ? "✅" : "⚠️"} 결과 - 성공:${data.success} 실패:${data.fail}`, isOk ? "o" : "w");
+    if (data.slip_nos?.length) elog(`전표번호: ${data.slip_nos.join(", ")}`, "o");
+    if (data.errors?.length)  data.errors.forEach(e => elog(`❌ ${e}`, "e"));
 
   } catch(err) {
     resultDiv.className = "ecount-result fail";
     resultDiv.innerHTML = `<strong>❌ 오류</strong><br>${err.message}`;
     resultDiv.classList.remove("hidden");
-    plog(`❌ 이카운트 오류: ${err.message}`, "e");
+    elog(`❌ 오류: ${err.message}`, "e");
   }
 
   btn.disabled = false; btn.textContent = "📤 이카운트 판매 전표 등록";
+}
+
+function elog(msg, t = "i") {
+  const box = document.getElementById("ecountLog");
+  const d = document.createElement("div");
+  d.className = `ll l${t}`; d.textContent = msg;
+  box.appendChild(d); box.scrollTop = box.scrollHeight;
 }
 </script>
 </body>
