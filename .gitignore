@@ -1,0 +1,20 @@
+# 민감한 정보 - 절대 올리지 않음
+.env
+master_data.xlsx
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# 테스트 파일
+test_ecount.py
+
+# 기타
+.DS_Store
+Thumbs.db

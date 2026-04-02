@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>바코드 자동 매칭 프로그램</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "맑은 고딕", sans-serif; background: #F0F4F8; color: #2D3748; min-height: 100vh; }
+header { background: linear-gradient(135deg, #1A3A5C, #2E6DA4); color: white; padding: 18px 32px; box-shadow: 0 2px 12px rgba(0,0,0,0.2); }
+header h1 { font-size: 19px; font-weight: 700; }
+header p  { font-size: 12px; opacity: 0.75; margin-top: 3px; }
+
+/* 탭 */
+.tabs { display: flex; background: #1A3A5C; padding: 0 28px; }
+.tab-btn { padding: 12px 28px; border: none; background: transparent; color: rgba(255,255,255,0.6); font-size: 13px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; font-family: inherit; }
+.tab-btn.active { color: white; border-bottom-color: #5DADE2; }
+.tab-btn:hover:not(.active) { color: rgba(255,255,255,0.85); }
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+.container { max-width: 820px; margin: 28px auto; padding: 0 16px; }
+.card { background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.07); padding: 22px; margin-bottom: 18px; }
+.card-title { font-size: 13px; font-weight: 700; color: #1A3A5C; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid #EBF5FB; display: flex; align-items: center; gap: 8px; }
+.badge { background: #1A3A5C; color: white; border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.info-bar { background: #EBF5FB; border-radius: 8px; padding: 11px 15px; font-size: 13px; color: #1A3A5C; display: flex; align-items: center; gap: 10px; }
+
+.upload-zone { border: 2px dashed #CBD5E0; border-radius: 10px; padding: 30px; text-align: center; cursor: pointer; background: #FAFBFC; transition: all 0.2s; }
+.upload-zone:hover, .upload-zone.drag-over { border-color: #2E6DA4; background: #EBF5FB; }
+.upload-zone .icon { font-size: 38px; margin-bottom: 8px; }
+.upload-zone strong { color: #2E6DA4; font-size: 14px; display: block; margin-bottom: 5px; }
+.upload-zone p { color: #718096; font-size: 12px; }
+.file-tag { display: inline-flex; align-items: center; gap: 6px; background: #EBF5FB; border-radius: 20px; padding: 5px 12px; font-size: 12px; color: #1A3A5C; margin: 4px 4px 0 0; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 14px; }
+.field label { font-size: 12px; color: #718096; font-weight: 600; margin-bottom: 4px; display: block; }
+.field input, .field select { width: 100%; padding: 8px 10px; border: 1.5px solid #E2E8F0; border-radius: 8px; font-size: 13px; background: white; font-family: inherit; transition: border-color 0.2s; }
+.field input:focus, .field select:focus { outline: none; border-color: #2E6DA4; }
+
+.run-btn { width: 100%; padding: 13px; border: none; border-radius: 10px; background: linear-gradient(135deg, #1A6B40, #27AE60); color: white; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; font-family: inherit; }
+.run-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(39,174,96,0.35); }
+.run-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.ecount-btn { width: 100%; padding: 13px; border: none; border-radius: 10px; background: linear-gradient(135deg, #1A3A5C, #2E6DA4); color: white; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; font-family: inherit; margin-top: 10px; }
+.ecount-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(46,109,164,0.35); }
+.ecount-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.ecount-result { margin-top: 14px; border-radius: 10px; padding: 14px; background: #EBF5FB; border-left: 4px solid #2E6DA4; font-size: 13px; }
+.ecount-result.success { background: #EAFAF1; border-left-color: #27AE60; }
+.ecount-result.fail    { background: #FDEDEC; border-left-color: #E74C3C; }
+
+.stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-top: 14px; }
+.stat { border-radius: 10px; padding: 13px; text-align: center; }
+.stat.s1 { background:#EBF5FB; } .stat.s1 .n { color:#1A3A5C; }
+.stat.s2 { background:#EAFAF1; } .stat.s2 .n { color:#1A6B40; }
+.stat.s3 { background:#FEF9E7; } .stat.s3 .n { color:#B7950B; }
+.stat .n { font-size: 24px; font-weight: 800; }
+.stat .l { font-size: 11px; color: #718096; margin-top: 2px; }
+
+.log-box { background: #1C2833; border-radius: 10px; padding: 14px; min-height: 100px; max-height: 220px; overflow-y: auto; font-family: Consolas, monospace; font-size: 12px; }
+.ll { padding: 2px 0; }
+.li { color: #A9B7C6; } .lo { color: #6FCF97; } .lw { color: #F2C94C; } .le { color: #EB5757; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📦 바코드 자동 매칭 프로그램</h1>
+  <p>PO 파일 바코드→상품코드 변환 | 주문서 품목코드→바코드 채우기</p>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('po', this)">📋 PO 파일 처리</button>
+  <button class="tab-btn"        onclick="switchTab('order', this)">🛒 주문서 바코드 채우기</button>
+</div>
+
+
+<!-- ══════════════ PO 탭 ══════════════ -->
+<div class="tab-pane active" id="tab-po">
+<div class="container">
+
+  <div class="card">
+    <div class="card-title"><span class="badge">✓</span> 마스터 데이터</div>
+    <div class="info-bar">📋 &nbsp;<span id="poMasterInfo">서버 연결 확인 중...</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="badge">1</span> PO 파일 선택</div>
+    <div class="upload-zone" id="poZone" onclick="document.getElementById('poFileInput').click()">
+      <div class="icon">📂</div>
+      <strong>PO 파일을 클릭하거나 드래그하세요</strong>
+      <p>엑셀 파일 (.xlsx, .xls) | 여러 파일 동시 가능</p>
+    </div>
+    <input type="file" id="poFileInput" accept=".xlsx,.xls" multiple style="display:none">
+    <div id="poFileList" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="badge">2</span> 설정</div>
+    <div class="grid2">
+      <div class="field">
+        <label>상품바코드 열 이름</label>
+        <input type="text" id="poBarcodeCol" value="상품바코드">
+      </div>
+      <div class="field">
+        <label>추가할 상품코드 열 이름</label>
+        <input type="text" id="poCodeCol" value="상품코드">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="badge">3</span> 실행</div>
+    <button class="run-btn" id="poRunBtn" onclick="runPO()" disabled>▶&nbsp; 상품코드 변환 후 다운로드</button>
+    <button class="ecount-btn" id="ecountBtn" onclick="sendToEcount()" disabled>📤&nbsp; 이카운트 판매 전표 등록</button>
+    <div class="stats hidden" id="poStats">
+      <div class="stat s1"><div class="n" id="poT">0</div><div class="l">전체</div></div>
+      <div class="stat s2"><div class="n" id="poM">0</div><div class="l">변환됨</div></div>
+      <div class="stat s3"><div class="n" id="poN">0</div><div class="l">미매칭</div></div>
+    </div>
+    <div class="ecount-result hidden" id="ecountResult"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="badge">✦</span> 처리 로그</div>
+    <div class="log-box" id="poLog"></div>
+  </div>
+
+</div>
+</div>
+
+
+<!-- ══════════════ 주문서 탭 ══════════════ -->
+<div class="tab-pane" id="tab-order">
+<div class="container">
+
+  <div class="card">
+    <div class="card-title"><span class="badge">✓</span> 마스터 데이터</div>
+    <div class="info-bar">📋 &nbsp;<span id="ordMasterInfo">서버 연결 확인 중...</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="badge">1</span> 주문서 파일 선택</div>
+    <div class="upload-zone" id="ordZone" onclick="document.getElementById('ordFileInput').click()">
+      <div class="icon">📂</div>
+      <strong>주문서 파일을 클릭하거나 드래그하세요</strong>
+      <p>엑셀 파일 (.xlsx, .xls)</p>
+    </div>
+    <input type="file" id="ordFileInput" accept=".xlsx,.xls" style="display:none">
+    <div id="ordFileTag" style="margin-top:8px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="badge">2</span> 열 설정</div>
+    <div class="grid3">
+      <div class="field">
+        <label>품목코드 열 이름</label>
+        <input type="text" id="ordCodeCol" value="품목코드">
+      </div>
+      <div class="field">
+        <label>바코드를 채울 열 이름</label>
+        <input type="text" id="ordBarcodeCol" value="lineup11 바코드">
+      </div>
+      <div class="field">
+        <label>헤더 행 번호</label>
+        <input type="number" id="ordHeaderRow" value="1" min="1" max="10">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="badge">3</span> 실행</div>
+    <button class="run-btn" id="ordRunBtn" onclick="runOrder()" disabled>▶&nbsp; 바코드 자동 채우기</button>
+    <div class="stats hidden" id="ordStats">
+      <div class="stat s1"><div class="n" id="ordT">0</div><div class="l">전체</div></div>
+      <div class="stat s2"><div class="n" id="ordM">0</div><div class="l">채워짐</div></div>
+      <div class="stat s3"><div class="n" id="ordN">0</div><div class="l">미매칭</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="badge">✦</span> 처리 로그</div>
+    <div class="log-box" id="ordLog"></div>
+  </div>
+
+</div>
+</div>
+
+
+<script>
+// ── 탭 전환 ─────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById("tab-" + name).classList.add("active");
+  btn.classList.add("active");
+}
+
+// ── 마스터 정보 로드 ────────────────────────
+window.onload = async () => {
+  setupDrop("poZone",  "poFileInput",  handlePOFiles);
+  setupDrop("ordZone", "ordFileInput", files => handleOrderFile(files[0]));
+  document.getElementById("poFileInput").addEventListener("change",  e => { if (e.target.files.length) handlePOFiles(Array.from(e.target.files)); });
+  document.getElementById("ordFileInput").addEventListener("change", e => { if (e.target.files[0]) handleOrderFile(e.target.files[0]); });
+
+  try {
+    const res  = await fetch("/api/master-info");
+    const data = await res.json();
+    document.getElementById("poMasterInfo").textContent  = `바코드→상품코드 ${data.po_count.toLocaleString()}개 매핑 로드 완료`;
+    document.getElementById("ordMasterInfo").textContent = `품목코드→바코드 ${data.order_count.toLocaleString()}개 (바코드 있음: ${data.order_with_barcode.toLocaleString()}개)`;
+  } catch {
+    document.getElementById("poMasterInfo").textContent  = "⚠ 서버 연결 실패 – main.py를 먼저 실행하세요";
+    document.getElementById("ordMasterInfo").textContent = "⚠ 서버 연결 실패 – main.py를 먼저 실행하세요";
+  }
+};
+
+function setupDrop(zoneId, inputId, handler) {
+  const zone = document.getElementById(zoneId);
+  zone.addEventListener("dragover",  e => { e.preventDefault(); zone.classList.add("drag-over"); });
+  zone.addEventListener("dragleave", ()=> zone.classList.remove("drag-over"));
+  zone.addEventListener("drop", e => {
+    e.preventDefault(); zone.classList.remove("drag-over");
+    handler(Array.from(e.dataTransfer.files));
+  });
+}
+
+// ══════════════════════════════════════
+// PO 탭
+// ══════════════════════════════════════
+let poFiles = [];
+
+function handlePOFiles(files) {
+  poFiles = files;
+  document.getElementById("poFileList").innerHTML =
+    files.map(f => `<span class="file-tag">📄 ${f.name}</span>`).join("") +
+    (files.length > 1 ? `<div style="font-size:12px;color:#718096;margin-top:6px;">총 ${files.length}개</div>` : "");
+  document.getElementById("poRunBtn").disabled  = false;
+  document.getElementById("ecountBtn").disabled = false;
+  plog(`파일 ${files.length}개 선택됨`, "o");
+}
+
+async function runPO() {
+  if (!poFiles.length) return alert("파일을 선택하세요.");
+  const barcodeCol = document.getElementById("poBarcodeCol").value.trim();
+  const codeCol    = document.getElementById("poCodeCol").value.trim();
+  const btn        = document.getElementById("poRunBtn");
+  btn.disabled = true; btn.textContent = "⏳ 서버에서 처리 중...";
+
+  let totalAll = 0, matchedAll = 0, missedAll = 0;
+
+  for (const file of poFiles) {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("barcodeCol", barcodeCol);
+    fd.append("codeCol",    codeCol);
+
+    try {
+      plog(`🚀 전송 중: ${file.name}`, "i");
+      const res = await fetch("/api/process-po", { method: "POST", body: fd });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "서버 오류"); }
+
+      totalAll   += parseInt(res.headers.get("X-Total")   || 0);
+      matchedAll += parseInt(res.headers.get("X-Matched") || 0);
+      missedAll  += parseInt(res.headers.get("X-Missed")  || 0);
+
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = Object.assign(document.createElement("a"), { href: url, download: file.name.replace(/\.xlsx?$/, "") + "_상품코드.xlsx" });
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+
+      plog(`✅ 완료: ${file.name}`, "o");
+    } catch(err) {
+      plog(`❌ ${file.name}: ${err.message}`, "e");
+    }
+  }
+
+  document.getElementById("poT").textContent = totalAll;
+  document.getElementById("poM").textContent = matchedAll;
+  document.getElementById("poN").textContent = missedAll;
+  document.getElementById("poStats").classList.remove("hidden");
+  plog(`─── 전체 ${totalAll}개 | 변환 ${matchedAll}개 | 미매칭 ${missedAll}개`, "o");
+  btn.disabled = false; btn.textContent = "▶ 상품코드 변환 실행 (재실행)";
+}
+
+function plog(msg, t = "i") {
+  const box = document.getElementById("poLog");
+  const d = document.createElement("div");
+  d.className = `ll l${t}`; d.textContent = msg;
+  box.appendChild(d); box.scrollTop = box.scrollHeight;
+}
+
+// ══════════════════════════════════════
+// 주문서 탭
+// ══════════════════════════════════════
+let ordFile = null;
+
+function handleOrderFile(file) {
+  ordFile = file;
+  document.getElementById("ordFileTag").innerHTML = `<span class="file-tag">📄 ${file.name}</span>`;
+  document.getElementById("ordRunBtn").disabled = false;
+  olog(`파일 선택됨: ${file.name}`, "o");
+}
+
+async function runOrder() {
+  if (!ordFile) return alert("파일을 선택하세요.");
+  const codeCol    = document.getElementById("ordCodeCol").value.trim();
+  const barcodeCol = document.getElementById("ordBarcodeCol").value.trim();
+  const headerRow  = document.getElementById("ordHeaderRow").value;
+  const btn        = document.getElementById("ordRunBtn");
+  btn.disabled = true; btn.textContent = "⏳ 서버에서 처리 중...";
+
+  const fd = new FormData();
+  fd.append("file",       ordFile);
+  fd.append("codeCol",    codeCol);
+  fd.append("barcodeCol", barcodeCol);
+  fd.append("headerRow",  headerRow);
+
+  try {
+    olog(`🚀 전송 중: ${ordFile.name}`, "i");
+    const res = await fetch("/api/process-order", { method: "POST", body: fd });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "서버 오류"); }
+
+    const total   = parseInt(res.headers.get("X-Total")   || 0);
+    const matched = parseInt(res.headers.get("X-Matched") || 0);
+    const missed  = parseInt(res.headers.get("X-Missed")  || 0);
+
+    document.getElementById("ordT").textContent = total;
+    document.getElementById("ordM").textContent = matched;
+    document.getElementById("ordN").textContent = missed;
+    document.getElementById("ordStats").classList.remove("hidden");
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement("a"), { href: url, download: ordFile.name.replace(/\.xlsx?$/, "") + "_바코드.xlsx" });
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+
+    olog(`✅ 완료: 전체 ${total}개 | 바코드 채워짐 ${matched}개 | 미매칭 ${missed}개`, "o");
+  } catch(err) {
+    olog(`❌ 오류: ${err.message}`, "e");
+  }
+
+  btn.disabled = false; btn.textContent = "▶ 바코드 자동 채우기 (재실행)";
+}
+
+function olog(msg, t = "i") {
+  const box = document.getElementById("ordLog");
+  const d = document.createElement("div");
+  d.className = `ll l${t}`; d.textContent = msg;
+  box.appendChild(d); box.scrollTop = box.scrollHeight;
+}
+
+// ══════════════════════════════════════
+// 이카운트 전송
+// ══════════════════════════════════════
+async function sendToEcount() {
+  if (!poFiles.length) return alert("파일을 선택하세요.");
+  if (poFiles.length > 1) return alert("이카운트 전송은 파일 1개씩 처리합니다.\n첫 번째 파일만 전송합니다.");
+
+  const file       = poFiles[0];
+  const barcodeCol = document.getElementById("poBarcodeCol").value.trim();
+  const codeCol    = document.getElementById("poCodeCol").value.trim();
+  const btn        = document.getElementById("ecountBtn");
+  const resultDiv  = document.getElementById("ecountResult");
+
+  btn.disabled = true; btn.textContent = "⏳ 이카운트 전송 중...";
+  resultDiv.className = "ecount-result hidden";
+  plog(`📤 이카운트 전송 시작: ${file.name}`, "i");
+
+  const fd = new FormData();
+  fd.append("file",       file);
+  fd.append("barcodeCol", barcodeCol);
+  fd.append("codeCol",    codeCol);
+
+  try {
+    const res  = await fetch("/api/send-to-ecount", { method: "POST", body: fd });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.detail || "서버 오류");
+
+    const isOk = data.status === "200" && data.fail === 0;
+    resultDiv.className = `ecount-result ${isOk ? "success" : "fail"}`;
+    resultDiv.innerHTML = `
+      <strong>${isOk ? "✅ 전표 등록 완료!" : "⚠️ 일부 실패"}</strong><br>
+      전송: ${data.total}건 &nbsp;|&nbsp; 성공: ${data.success}건 &nbsp;|&nbsp; 실패: ${data.fail}건
+      ${data.slip_nos?.length ? `<br>전표번호: <strong>${data.slip_nos.join(", ")}</strong>` : ""}
+      ${data.unmatched > 0 ? `<br>⚠ 바코드 미매칭 ${data.unmatched}건 (미전송)` : ""}
+      ${data.errors?.length ? `<br><span style="color:#E74C3C">${data.errors.join("<br>")}</span>` : ""}
+    `;
+    resultDiv.classList.remove("hidden");
+
+    plog(`${isOk ? "✅" : "⚠️"} 이카운트 결과 - 성공:${data.success} 실패:${data.fail}`, isOk ? "o" : "w");
+    if (data.slip_nos?.length) plog(`전표번호: ${data.slip_nos.join(", ")}`, "o");
+    if (data.errors?.length)  data.errors.forEach(e => plog(`❌ ${e}`, "e"));
+
+  } catch(err) {
+    resultDiv.className = "ecount-result fail";
+    resultDiv.innerHTML = `<strong>❌ 오류</strong><br>${err.message}`;
+    resultDiv.classList.remove("hidden");
+    plog(`❌ 이카운트 오류: ${err.message}`, "e");
+  }
+
+  btn.disabled = false; btn.textContent = "📤 이카운트 판매 전표 등록";
+}
+</script>
+</body>
+</html>
