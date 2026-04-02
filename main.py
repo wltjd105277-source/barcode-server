@@ -3,7 +3,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import StreamingResponse, JSONResponse
 import uvicorn
 import pandas as pd
-import io, os, httpx
+import io, os, httpx, json
 from urllib.parse import quote
 from datetime import datetime
 from dotenv import load_dotenv
@@ -71,17 +71,19 @@ MASTER_PATH = os.path.join(BASE_DIR, "master_data.xlsx")
 # 마스터 데이터 로드 헬퍼
 # ──────────────────────────────────────────────
 def load_master():
-    """master_data.xlsx에서 두 가지 매핑을 로드한다."""
+    """master_data.xlsx에서 매핑 및 단종/매입가인상 목록을 로드한다."""
     barcode_to_code = {}  # PO용: 바코드 → 상품코드
     code_to_barcode = {}  # 주문서용: 품목코드 → lineup11 바코드
+    discontinued    = set()  # 단종: 바코드 or 품목코드
+    price_up        = set()  # 매입가인상: 바코드 or 품목코드
 
     if not os.path.exists(MASTER_PATH):
         print(f"❌ master_data.xlsx 없음: {MASTER_PATH}")
-        return barcode_to_code, code_to_barcode
+        return barcode_to_code, code_to_barcode, discontinued, price_up
 
     xl = pd.ExcelFile(MASTER_PATH)
 
-    # PO 매핑 (시트: PO매핑 또는 단일 시트)
+    # PO 매핑
     po_sheet = "PO매핑" if "PO매핑" in xl.sheet_names else xl.sheet_names[0]
     df_po = pd.read_excel(MASTER_PATH, sheet_name=po_sheet, dtype=str)
     df_po.columns = df_po.columns.str.strip()
@@ -95,7 +97,7 @@ def load_master():
         }
         print(f"✅ PO 매핑 로드: {len(barcode_to_code)}개")
 
-    # 주문서 매핑 (시트: 주문서매핑)
+    # 주문서 매핑
     if "주문서매핑" in xl.sheet_names:
         df_ord = pd.read_excel(MASTER_PATH, sheet_name="주문서매핑", dtype=str)
         df_ord.columns = df_ord.columns.str.strip()
@@ -110,7 +112,27 @@ def load_master():
             with_bc = sum(1 for v in code_to_barcode.values() if v)
             print(f"✅ 주문서 매핑 로드: {len(code_to_barcode)}개 (바코드 있음: {with_bc}개)")
 
-    return barcode_to_code, code_to_barcode
+    # 단종 목록 (바코드 or 품목코드)
+    if "단종" in xl.sheet_names:
+        df_d = pd.read_excel(MASTER_PATH, sheet_name="단종", dtype=str).fillna("")
+        df_d.columns = df_d.columns.str.strip()
+        for col in ["바코드", "품목코드"]:
+            if col in df_d.columns:
+                vals = df_d[col].str.strip().str.replace(r"\.0$", "", regex=True)
+                discontinued |= set(v for v in vals if v)
+        print(f"✅ 단종 목록: {len(discontinued)}개")
+
+    # 매입가인상 목록
+    if "매입가인상" in xl.sheet_names:
+        df_p = pd.read_excel(MASTER_PATH, sheet_name="매입가인상", dtype=str).fillna("")
+        df_p.columns = df_p.columns.str.strip()
+        for col in ["바코드", "품목코드"]:
+            if col in df_p.columns:
+                vals = df_p[col].str.strip().str.replace(r"\.0$", "", regex=True)
+                price_up |= set(v for v in vals if v)
+        print(f"✅ 매입가인상 목록: {len(price_up)}개")
+
+    return barcode_to_code, code_to_barcode, discontinued, price_up
 
 
 # ──────────────────────────────────────────────
@@ -126,11 +148,13 @@ async def home(request: Request):
 @app.get("/api/master-info")
 async def master_info():
     """마스터 데이터 현황 반환"""
-    barcode_to_code, code_to_barcode = load_master()
+    barcode_to_code, code_to_barcode, discontinued, price_up = load_master()
     return {
         "po_count":           len(barcode_to_code),
         "order_count":        len(code_to_barcode),
         "order_with_barcode": sum(1 for v in code_to_barcode.values() if v),
+        "discontinued_count": len(discontinued),
+        "price_up_count":     len(price_up),
     }
 
 
@@ -142,7 +166,7 @@ async def process_po(
     codeCol:    str        = Form("상품코드"),
 ):
     print(f"\n--- 🚀 PO [{file.filename}] 시작 ---")
-    barcode_to_code, _ = load_master()
+    barcode_to_code, _, _d, _p = load_master()
 
     contents = await file.read()
     df = pd.read_excel(io.BytesIO(contents), dtype=str)
@@ -195,7 +219,7 @@ async def process_order(
     headerRow:  int        = Form(1),
 ):
     print(f"\n--- 🚀 주문서 [{file.filename}] 시작 ---")
-    _, code_to_barcode = load_master()
+    _, code_to_barcode, _d, _p = load_master()
 
     contents  = await file.read()
     header_idx = headerRow - 1
@@ -242,16 +266,88 @@ async def process_order(
     )
 
 
+# ── PO 파일 미리보기 ──────────────────────────
+@app.post("/api/parse-po")
+async def parse_po(file: UploadFile = File(...)):
+    """PO 파일을 읽어 항목 목록 반환 (납품부족사유 선택용)"""
+    contents = await file.read()
+    df = pd.read_excel(io.BytesIO(contents), dtype=str).fillna("")
+    df.columns = df.columns.str.strip()
+
+    barcode_to_code, _, discontinued, price_up = load_master()
+
+    items = []
+    for i, row in df.iterrows():
+        bc = str(row.get("상품바코드", "")).strip().replace(".0", "")
+        prod_cd = barcode_to_code.get(bc, "")
+
+        # 파일에 이미 기입된 사유 우선, 없으면 마스터 자동 감지
+        existing_reason = str(row.get("납품부족사유", "")).strip()
+        if existing_reason:
+            auto_reason = existing_reason
+        elif bc in discontinued or (prod_cd and prod_cd in discontinued):
+            auto_reason = "제품 단종 - 제조사 생산중단 혹은 공급사 취급중단 - 시장 단종"
+        elif bc in price_up or (prod_cd and prod_cd in price_up):
+            auto_reason = "제품 인상 - 가격 이슈 (Price) - 매입가 인상 협상 중"
+        else:
+            auto_reason = ""
+
+        items.append({
+            "idx":       i,
+            "발주번호":  str(row.get("발주번호", "")).strip(),
+            "물류센터":  str(row.get("물류센터", "")).strip(),
+            "상품이름":  str(row.get("상품이름", "")).strip()[:40],
+            "발주수량":  str(row.get("발주수량", "")).strip(),
+            "확정수량":  str(row.get("확정수량", "")).strip(),
+            "매핑여부":  "✅" if prod_cd else "❌",
+            "사유":      auto_reason,
+        })
+    return JSONResponse(content={"items": items, "total": len(items)})
+
+
+# ── PO 파일 다운로드 (납품부족사유 반영) ──────────
+@app.post("/api/download-po")
+async def download_po(
+    file:             UploadFile = File(...),
+    shortage_reasons: str        = Form("{}"),
+):
+    """납품부족사유를 채워서 PO 파일 다운로드"""
+    contents = await file.read()
+    df = pd.read_excel(io.BytesIO(contents), dtype=str).fillna("")
+    df.columns = df.columns.str.strip()
+
+    reasons: dict = json.loads(shortage_reasons)
+    for idx_str, reason in reasons.items():
+        idx = int(idx_str)
+        if idx < len(df):
+            df.at[idx, "납품부족사유"] = reason
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False)
+    output.seek(0)
+
+    safe_name = quote(file.filename.replace(".xlsx", "_납품부족사유.xlsx"))
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{safe_name}"},
+    )
+
+
 # ── 이카운트 판매 전표 등록 ─────────────────────
 # PO_ 파일을 업로드하면 자동으로 변환 후 이카운트에 전송
 @app.post("/api/send-to-ecount")
 async def send_to_ecount(
-    file:       UploadFile = File(...),
-    staff_code: str        = Form(""),   # 담당자 코드
+    file:             UploadFile = File(...),
+    staff_code:       str        = Form(""),   # 담당자 코드
+    io_date:          str        = Form(""),   # 판매일자 (yyyymmdd), 비어있으면 오늘
+    shortage_reasons: str        = Form("{}"), # {idx: 사유} JSON
 ):
     print(f"\n--- 📤 이카운트 전송 [{file.filename}] 시작 ---")
-    today = datetime.today().strftime("%Y%m%d")
-    barcode_to_code, _ = load_master()
+    today = io_date.strip() if io_date.strip() else datetime.today().strftime("%Y%m%d")
+    print(f"📅 판매일자: {today}")
+    barcode_to_code, _, discontinued, price_up = load_master()
 
     contents = await file.read()
     try:
@@ -271,7 +367,25 @@ async def send_to_ecount(
     df["상품바코드"] = df["상품바코드"].str.strip().str.replace(r"\.0$", "", regex=True)
     df["_품목코드"] = df["상품바코드"].map(lambda bc: barcode_to_code.get(bc, ""))
 
-    # ② 수량 컬럼 선택 (확정수량 우선, 없으면 발주수량)
+    # ② 납품부족사유 필터 — 제품 단종/제품 인상은 이카운트 제외
+    reasons: dict = json.loads(shortage_reasons)
+    excluded = {int(k) for k, v in reasons.items()
+                if v.startswith("제품 단종") or v.startswith("제품 인상")}
+
+    # 프론트에서 사유가 없더라도 마스터 자동 감지로 제외
+    for i, row in df.iterrows():
+        if i not in excluded:
+            bc = str(row.get("상품바코드", "")).strip().replace(".0", "")
+            prod_cd = barcode_to_code.get(bc, "")
+            if bc in discontinued or (prod_cd and prod_cd in discontinued):
+                excluded.add(i)
+            elif bc in price_up or (prod_cd and prod_cd in price_up):
+                excluded.add(i)
+
+    excluded_cnt = len(excluded)
+    df = df[~df.index.isin(excluded)].copy()
+
+    # ③ 수량 컬럼 선택 (확정수량 우선, 없으면 발주수량)
     qty_col = "확정수량" if "확정수량" in df.columns else "발주수량"
     df[qty_col] = df[qty_col].str.strip().str.replace(",", "")
 
@@ -320,17 +434,18 @@ async def send_to_ecount(
             "IO_DATE":       today,
             "CUST":          "202308091",       # 거래처코드 고정
             "WH_CD":         "30",              # 출하창고 고정
-            "STAFF":         staff_code,         # 담당자 코드
+            "EMP_CD":        staff_code,         # 담당자 코드
             "PROD_CD":       str(row["_품목코드"]).strip(),
-            "PROD_DES":      str(row.get("상품이름", "")).strip(),
+            "PROD_DES":      "",   # 이카운트가 품목코드 기준으로 자동 입력
             "QTY":           qty_str,
             "PRICE":         str(price_val),
             "SUPPLY_AMT":    supply_str,
             "VAT_AMT":       vat_str,
             "REMARKS":       f"{warehouse} - {doc_no}",  # 예) 안산3 - 128117514
+            "U_MEMO5":       f"{warehouse} - {doc_no}",  # 비고사항 = 문자형식5
         }})
 
-    print(f"📦 전송 항목: {len(bulk_list)}개 | 미매칭: {unmatched}개")
+    print(f"📦 전송 항목: {len(bulk_list)}개 | 미매칭: {unmatched}개 | 제외(단종/매입가인상): {excluded_cnt}개")
 
     # ⑥ 세션 발급 및 전송
     try:
@@ -364,6 +479,7 @@ async def send_to_ecount(
         "slip_nos":  slip_nos,
         "errors":    errors,
         "unmatched": unmatched,
+        "excluded":  excluded_cnt,
     })
 
 

@@ -48,6 +48,27 @@ header p  { font-size: 12px; opacity: 0.75; margin-top: 3px; }
 .ecount-result.success { background: #EAFAF1; border-left-color: #27AE60; }
 .ecount-result.fail    { background: #FDEDEC; border-left-color: #E74C3C; }
 
+/* 납품부족사유 테이블 */
+.po-table-wrap { overflow-x: auto; margin-top: 12px; border-radius: 10px; border: 1px solid #E2E8F0; }
+.po-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.po-table th { background: #1A3A5C; color: white; padding: 8px 10px; text-align: center; white-space: nowrap; }
+.po-table td { padding: 6px 8px; border-bottom: 1px solid #EBF5FB; vertical-align: middle; }
+.po-table tr:hover td { background: #F7FAFC; }
+.po-table .name-col { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-table select { padding: 3px 6px; border: 1.5px solid #E2E8F0; border-radius: 6px; font-size: 12px; font-family: inherit; cursor: pointer; }
+.po-table select.reason-단종   { background: #FDEDEC; border-color: #E74C3C; color: #C0392B; }
+.po-table select.reason-인상   { background: #FEF9E7; border-color: #F39C12; color: #B7770D; }
+.po-table select.reason-품절   { background: #EBF5FB; border-color: #2E6DA4; color: #1A3A5C; }
+.po-table .no-match { color: #E74C3C; font-weight: 700; }
+.po-summary { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.po-summary .chip { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.chip-total   { background: #EBF5FB; color: #1A3A5C; }
+.chip-exclude { background: #FDEDEC; color: #C0392B; }
+.chip-nomatch { background: #FEF9E7; color: #B7770D; }
+.chip-send    { background: #EAFAF1; color: #1A6B40; }
+.dl-btn { width: 100%; padding: 11px; border: 2px solid #1A3A5C; border-radius: 10px; background: white; color: #1A3A5C; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; font-family: inherit; margin-top: 8px; }
+.dl-btn:hover { background: #EBF5FB; }
+
 .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-top: 14px; }
 .stat { border-radius: 10px; padding: 13px; text-align: center; }
 .stat.s1 { background:#EBF5FB; } .stat.s1 .n { color:#1A3A5C; }
@@ -206,8 +227,24 @@ header p  { font-size: 12px; opacity: 0.75; margin-top: 3px; }
     <div id="ecountFileTag" style="margin-top:8px;"></div>
   </div>
 
+  <div class="card hidden" id="poPreviewCard">
+    <div class="card-title"><span class="badge">2</span> 납품부족사유 선택 <span style="font-size:11px;color:#718096;font-weight:400;">(제품단종/제품인상은 이카운트 전송 제외)</span></div>
+    <div class="po-summary" id="poSummary"></div>
+    <div class="po-table-wrap">
+      <table class="po-table" id="poTable">
+        <thead>
+          <tr>
+            <th>#</th><th>물류센터</th><th>발주번호</th><th>상품이름</th>
+            <th>발주수량</th><th>확정수량</th><th>매핑</th><th>납품부족사유</th>
+          </tr>
+        </thead>
+        <tbody id="poTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="card">
-    <div class="card-title"><span class="badge">2</span> 설정</div>
+    <div class="card-title"><span class="badge">3</span> 설정</div>
     <div class="grid2">
       <div class="field">
         <label>담당자 코드</label>
@@ -225,14 +262,15 @@ header p  { font-size: 12px; opacity: 0.75; margin-top: 3px; }
       </div>
       <div class="field">
         <label>판매일자</label>
-        <input type="text" id="ioDate" placeholder="오늘 날짜 자동 입력" disabled style="background:#F7FAFC;color:#718096;">
+        <input type="date" id="ioDate" style="cursor:pointer;">
       </div>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-title"><span class="badge">3</span> 이카운트 전송</div>
+    <div class="card-title"><span class="badge">4</span> 이카운트 전송 / 파일 다운로드</div>
     <button class="ecount-btn" id="ecountSendBtn" onclick="sendToEcount()" disabled>📤&nbsp; 이카운트 판매 전표 등록</button>
+    <button class="dl-btn hidden" id="dlPoBtn" onclick="downloadPO()">⬇&nbsp; 납품부족사유 채운 PO 파일 다운로드</button>
     <div class="ecount-result hidden" id="ecountResult"></div>
   </div>
 
@@ -263,9 +301,12 @@ window.onload = async () => {
   document.getElementById("ordFileInput").addEventListener("change",    e => { if (e.target.files[0]) handleOrderFile(e.target.files[0]); });
   document.getElementById("ecountFileInput").addEventListener("change", e => { if (e.target.files[0]) handleEcountFile(e.target.files[0]); });
 
-  // 오늘 날짜 표시
+  // 오늘 날짜를 기본값으로 설정
   const today = new Date();
-  document.getElementById("ioDate").placeholder = `${today.getFullYear()}${String(today.getMonth()+1).padStart(2,"0")}${String(today.getDate()).padStart(2,"0")} (자동)`;
+  const yyyy = today.getFullYear();
+  const mm   = String(today.getMonth()+1).padStart(2,"0");
+  const dd   = String(today.getDate()).padStart(2,"0");
+  document.getElementById("ioDate").value = `${yyyy}-${mm}-${dd}`;
 
   try {
     const res  = await fetch("/api/master-info");
@@ -418,11 +459,95 @@ function olog(msg, t = "i") {
 // ══════════════════════════════════════
 let ecountFile = null;
 
-function handleEcountFile(file) {
+async function handleEcountFile(file) {
   ecountFile = file;
   document.getElementById("ecountFileTag").innerHTML = `<span class="file-tag">📄 ${file.name}</span>`;
-  document.getElementById("ecountSendBtn").disabled = false;
-  elog(`파일 선택됨: ${file.name}`, "o");
+  elog(`파일 선택됨: ${file.name} — 항목 분석 중...`, "i");
+
+  // 파일 미리보기 로드
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const res  = await fetch("/api/parse-po", { method: "POST", body: fd });
+    const data = await res.json();
+    renderPreviewTable(data.items);
+    document.getElementById("poPreviewCard").classList.remove("hidden");
+    document.getElementById("ecountSendBtn").disabled = false;
+    document.getElementById("dlPoBtn").classList.remove("hidden");
+    elog(`✅ ${data.total}개 항목 로드 완료`, "o");
+  } catch(e) {
+    elog(`❌ 미리보기 실패: ${e.message}`, "e");
+    document.getElementById("ecountSendBtn").disabled = false;
+  }
+}
+
+function renderPreviewTable(items) {
+  const REASONS = [
+    { value: "", label: "(없음)" },
+    { value: "제품 단종 - 제조사 생산중단 혹은 공급사 취급중단 - 시장 단종", label: "제품 단종" },
+    { value: "제품 인상 - 가격 이슈 (Price) - 매입가 인상 협상 중",          label: "제품 인상" },
+    { value: "제품 품절 - 협력사 재고부족 - 수입상품 입고지연 (선적/통관지연)", label: "제품 품절" },
+  ];
+  const tbody = document.getElementById("poTableBody");
+  tbody.innerHTML = "";
+
+  items.forEach(item => {
+    const tr = document.createElement("tr");
+    const opts = REASONS.map(r =>
+      `<option value="${r.value}" ${item.사유===r.value?"selected":""}>${r.label}</option>`
+    ).join("");
+    tr.innerHTML = `
+      <td style="text-align:center;color:#718096">${item.idx+1}</td>
+      <td style="white-space:nowrap">${item.물류센터}</td>
+      <td style="white-space:nowrap;font-size:11px">${item.발주번호}</td>
+      <td class="name-col" title="${item.상품이름}">${item.상품이름}</td>
+      <td style="text-align:center">${item.발주수량}</td>
+      <td style="text-align:center">${item.확정수량}</td>
+      <td style="text-align:center" class="${item.매핑여부==='✅'?'':'no-match'}">${item.매핑여부}</td>
+      <td><select data-idx="${item.idx}" onchange="onReasonChange(this)" class="${reasonClass(item.사유)}">${opts}</select></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  updateSummary();
+}
+
+function reasonClass(val) {
+  if (!val) return "";
+  if (val.startsWith("제품 단종")) return "reason-단종";
+  if (val.startsWith("제품 인상")) return "reason-인상";
+  if (val.startsWith("제품 품절")) return "reason-품절";
+  return "";
+}
+
+function onReasonChange(sel) {
+  sel.className = reasonClass(sel.value);
+  updateSummary();
+}
+
+function updateSummary() {
+  const selects = document.querySelectorAll("#poTableBody select");
+  let total=0, exclude=0, nomatch=0;
+  selects.forEach(s => {
+    total++;
+    if (s.value.startsWith("제품 단종") || s.value.startsWith("제품 인상")) exclude++;
+  });
+  // no-match count from table
+  document.querySelectorAll("#poTableBody .no-match").forEach(()=>nomatch++);
+  const send = total - exclude;
+  document.getElementById("poSummary").innerHTML = `
+    <span class="chip chip-total">전체 ${total}건</span>
+    <span class="chip chip-send">이카운트 전송 ${send}건</span>
+    <span class="chip chip-exclude">제외(단종/매입가인상) ${exclude}건</span>
+    <span class="chip chip-nomatch">바코드 미매칭 ${nomatch}건</span>
+  `;
+}
+
+function getShortageReasons() {
+  const reasons = {};
+  document.querySelectorAll("#poTableBody select").forEach(s => {
+    if (s.value) reasons[s.dataset.idx] = s.value;
+  });
+  return JSON.stringify(reasons);
 }
 
 async function sendToEcount() {
@@ -436,9 +561,13 @@ async function sendToEcount() {
   elog(`📤 이카운트 전송 시작: ${ecountFile.name}`, "i");
 
   const staffCode = document.getElementById("staffCode").value.trim();
+  const ioDateRaw = document.getElementById("ioDate").value;
+  const ioDate    = ioDateRaw ? ioDateRaw.replace(/-/g, "") : "";
   const fd = new FormData();
-  fd.append("file",       ecountFile);
-  fd.append("staff_code", staffCode);
+  fd.append("file",             ecountFile);
+  fd.append("staff_code",       staffCode);
+  fd.append("io_date",          ioDate);
+  fd.append("shortage_reasons", getShortageReasons());
 
   try {
     const res  = await fetch("/api/send-to-ecount", { method: "POST", body: fd });
@@ -452,6 +581,7 @@ async function sendToEcount() {
       <strong>${isOk ? "✅ 전표 등록 완료!" : "⚠️ 일부 실패"}</strong><br>
       전송: ${data.total}건 &nbsp;|&nbsp; 성공: ${data.success}건 &nbsp;|&nbsp; 실패: ${data.fail}건
       ${data.slip_nos?.length ? `<br>전표번호: <strong>${data.slip_nos.join(", ")}</strong>` : ""}
+      ${data.excluded  > 0 ? `<br>🚫 제외(제품단종/제품인상): ${data.excluded}건` : ""}
       ${data.unmatched > 0 ? `<br>⚠ 바코드 미매칭 ${data.unmatched}건 (미전송)` : ""}
       ${data.errors?.length ? `<br><span style="color:#E74C3C">${data.errors.join("<br>")}</span>` : ""}
     `;
@@ -469,6 +599,32 @@ async function sendToEcount() {
   }
 
   btn.disabled = false; btn.textContent = "📤 이카운트 판매 전표 등록";
+}
+
+async function downloadPO() {
+  if (!ecountFile) return alert("파일을 선택하세요.");
+  const btn = document.getElementById("dlPoBtn");
+  btn.disabled = true; btn.textContent = "⏳ 다운로드 준비 중...";
+
+  const fd = new FormData();
+  fd.append("file",             ecountFile);
+  fd.append("shortage_reasons", getShortageReasons());
+
+  try {
+    const res = await fetch("/api/download-po", { method: "POST", body: fd });
+    if (!res.ok) throw new Error("다운로드 실패");
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement("a"), {
+      href: url,
+      download: ecountFile.name.replace(".xlsx", "_납품부족사유.xlsx")
+    });
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    elog("✅ PO 파일 다운로드 완료", "o");
+  } catch(e) {
+    elog(`❌ 다운로드 오류: ${e.message}`, "e");
+  }
+  btn.disabled = false; btn.textContent = "⬇ 납품부족사유 채운 PO 파일 다운로드";
 }
 
 function elog(msg, t = "i") {
