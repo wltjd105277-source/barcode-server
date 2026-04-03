@@ -3,221 +3,274 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>바코드 자동 매칭 프로그램</title>
+<title>LINEUP ERP Bridge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: "맑은 고딕", sans-serif; background: #F0F4F8; color: #2D3748; min-height: 100vh; }
-header { background: linear-gradient(135deg, #1A3A5C, #2E6DA4); color: white; padding: 18px 32px; box-shadow: 0 2px 12px rgba(0,0,0,0.2); }
-header h1 { font-size: 19px; font-weight: 700; }
-header p  { font-size: 12px; opacity: 0.75; margin-top: 3px; }
+:root {
+  --bg:         #080E1C;
+  --surface:    #0F1828;
+  --surface2:   #162034;
+  --surface3:   #1C2840;
+  --border:     #1E2E44;
+  --border2:    #243650;
+  --accent:     #00D4CC;
+  --accent-dim: #007A76;
+  --accent-glow:rgba(0,212,204,0.15);
+  --text:       #D8EAF5;
+  --text2:      #6A8FAD;
+  --text3:      #3E5F80;
+  --success:    #00C27A;
+  --danger:     #FF4757;
+  --warning:    #FFB020;
+  --info:       #3B9EEB;
+}
 
-/* 탭 */
-.tabs { display: flex; background: #1A3A5C; padding: 0 28px; }
-.tab-btn { padding: 12px 28px; border: none; background: transparent; color: rgba(255,255,255,0.6); font-size: 13px; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; font-family: inherit; }
-.tab-btn.active { color: white; border-bottom-color: #5DADE2; }
-.tab-btn:hover:not(.active) { color: rgba(255,255,255,0.85); }
-.tab-pane { display: none; }
-.tab-pane.active { display: block; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-.container { max-width: 820px; margin: 28px auto; padding: 0 16px; }
-.card { background: white; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.07); padding: 22px; margin-bottom: 18px; }
-.card-title { font-size: 13px; font-weight: 700; color: #1A3A5C; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid #EBF5FB; display: flex; align-items: center; gap: 8px; }
-.badge { background: #1A3A5C; color: white; border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
-.info-bar { background: #EBF5FB; border-radius: 8px; padding: 11px 15px; font-size: 13px; color: #1A3A5C; display: flex; align-items: center; gap: 10px; }
+body {
+  font-family: 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 13px;
+}
 
-.upload-zone { border: 2px dashed #CBD5E0; border-radius: 10px; padding: 30px; text-align: center; cursor: pointer; background: #FAFBFC; transition: all 0.2s; }
-.upload-zone:hover, .upload-zone.drag-over { border-color: #2E6DA4; background: #EBF5FB; }
-.upload-zone .icon { font-size: 38px; margin-bottom: 8px; }
-.upload-zone strong { color: #2E6DA4; font-size: 14px; display: block; margin-bottom: 5px; }
-.upload-zone p { color: #718096; font-size: 12px; }
-.file-tag { display: inline-flex; align-items: center; gap: 6px; background: #EBF5FB; border-radius: 20px; padding: 5px 12px; font-size: 12px; color: #1A3A5C; margin: 4px 4px 0 0; }
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 48px 48px;
+  opacity: 0.35;
+}
 
+/* ── 헤더 ── */
+header {
+  position: relative; z-index: 10;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border2);
+  padding: 0 32px;
+  display: flex; align-items: center; gap: 0;
+}
+.header-accent {
+  width: 4px; height: 44px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-dim));
+  border-radius: 2px; margin-right: 18px; flex-shrink: 0;
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+.header-text { padding: 16px 0; }
+.header-text h1 { font-size: 16px; font-weight: 800; letter-spacing: 0.04em; color: var(--text); }
+.header-text h1 span { color: var(--accent); }
+.header-text p { font-size: 11px; color: var(--text2); margin-top: 2px; letter-spacing: 0.02em; }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.header-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; color: var(--accent-dim);
+  border: 1px solid var(--border2);
+  padding: 3px 9px; border-radius: 4px; letter-spacing: 0.06em;
+}
+.master-status {
+  font-size: 11px; color: var(--text2);
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 20px; padding: 4px 12px;
+}
+
+/* ── 컨테이너 / 카드 ── */
+.container {
+  position: relative; z-index: 1;
+  max-width: 860px; margin: 24px auto; padding: 0 16px;
+}
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 20px 22px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+}
+.card-title {
+  font-size: 11px; font-weight: 700;
+  color: var(--text2); letter-spacing: 0.08em; text-transform: uppercase;
+  margin-bottom: 14px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 9px;
+}
+.badge {
+  background: var(--accent); color: var(--bg);
+  border-radius: 4px; width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; flex-shrink: 0;
+}
+.info-bar {
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 10px 14px;
+  font-size: 12px; color: var(--text);
+  display: flex; align-items: center; gap: 10px;
+}
+
+/* ── 업로드 존 ── */
+.upload-zone {
+  border: 1.5px dashed var(--border2);
+  border-radius: 10px; padding: 28px;
+  text-align: center; cursor: pointer;
+  background: var(--surface2); transition: all 0.2s;
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(0,212,204,0.06);
+  box-shadow: inset 0 0 24px rgba(0,212,204,0.05);
+}
+.upload-zone .icon { font-size: 32px; margin-bottom: 8px; opacity: 0.7; }
+.upload-zone strong { color: var(--accent); font-size: 13px; display: block; margin-bottom: 4px; }
+.upload-zone p { color: var(--text2); font-size: 11px; }
+.file-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface3); border: 1px solid var(--border2);
+  border-radius: 20px; padding: 4px 11px;
+  font-size: 11px; color: var(--accent); margin: 4px 4px 0 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ── 그리드 / 필드 ── */
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
-.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 14px; }
-.field label { font-size: 12px; color: #718096; font-weight: 600; margin-bottom: 4px; display: block; }
-.field input, .field select { width: 100%; padding: 8px 10px; border: 1.5px solid #E2E8F0; border-radius: 8px; font-size: 13px; background: white; font-family: inherit; transition: border-color 0.2s; }
-.field input:focus, .field select:focus { outline: none; border-color: #2E6DA4; }
+.field label { font-size: 11px; color: var(--text2); font-weight: 600; margin-bottom: 5px; display: block; letter-spacing: 0.04em; }
+.field input, .field select {
+  width: 100%; padding: 8px 10px;
+  border: 1px solid var(--border2); border-radius: 7px;
+  font-size: 12px; background: var(--surface2); color: var(--text);
+  font-family: inherit; transition: border-color 0.18s, box-shadow 0.18s;
+}
+.field input:focus, .field select:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0,212,204,0.1);
+}
+.field input:disabled { background: var(--surface); color: var(--text3); border-color: var(--border); }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.4); cursor: pointer; }
 
-.run-btn { width: 100%; padding: 13px; border: none; border-radius: 10px; background: linear-gradient(135deg, #1A6B40, #27AE60); color: white; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; font-family: inherit; }
-.run-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(39,174,96,0.35); }
-.run-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-.ecount-btn { width: 100%; padding: 13px; border: none; border-radius: 10px; background: linear-gradient(135deg, #1A3A5C, #2E6DA4); color: white; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; font-family: inherit; margin-top: 10px; }
-.ecount-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(46,109,164,0.35); }
-.ecount-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-.ecount-result { margin-top: 14px; border-radius: 10px; padding: 14px; background: #EBF5FB; border-left: 4px solid #2E6DA4; font-size: 13px; }
-.ecount-result.success { background: #EAFAF1; border-left-color: #27AE60; }
-.ecount-result.fail    { background: #FDEDEC; border-left-color: #E74C3C; }
+/* ── 버튼 ── */
+.ecount-btn {
+  width: 100%; padding: 13px;
+  border: none; border-radius: 8px;
+  background: linear-gradient(135deg, #005A6E, #00D4CC);
+  color: #fff; font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s; font-family: inherit;
+  margin-top: 10px; letter-spacing: 0.03em;
+}
+.ecount-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0,212,204,0.35);
+}
+.ecount-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
-/* 납품부족사유 테이블 */
-.po-table-wrap { overflow-x: auto; margin-top: 12px; border-radius: 10px; border: 1px solid #E2E8F0; }
+.dl-btn {
+  width: 100%; padding: 10px;
+  border: 1px solid var(--border2); border-radius: 8px;
+  background: transparent; color: var(--text2);
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all 0.18s; font-family: inherit; margin-top: 8px;
+}
+.dl-btn:hover { background: var(--surface2); color: var(--text); border-color: var(--accent); }
+
+/* ── 결과 박스 ── */
+.ecount-result {
+  margin-top: 12px; border-radius: 8px; padding: 13px 16px;
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-left: 3px solid var(--info); font-size: 12px; line-height: 1.9;
+}
+.ecount-result.success { border-left-color: var(--success); }
+.ecount-result.fail    { border-left-color: var(--danger); }
+
+/* ── 재고 현황 테이블 ── */
+.inv-table-wrap { overflow-x: auto; margin-top: 12px; border-radius: 8px; border: 1px solid var(--border2); }
+.inv-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.inv-table th {
+  background: var(--surface3); color: var(--text2);
+  padding: 8px 10px; text-align: center; white-space: nowrap;
+  font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase;
+  border-bottom: 1px solid var(--border2);
+}
+.inv-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: center; vertical-align: middle; }
+.inv-table tbody tr:last-child td { border-bottom: none; }
+.inv-table tr:hover td { background: var(--surface2); }
+.inv-table tr.low-stock td { background: rgba(255,71,87,0.08); color: var(--danger); font-weight: 600; }
+.inv-table tr.low-stock:hover td { background: rgba(255,71,87,0.13); }
+.inv-qty-bad { color: var(--danger); font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+.inv-qty-ok  { color: var(--success); font-family: 'JetBrains Mono', monospace; }
+
+/* ── 납품부족사유 테이블 ── */
+.po-table-wrap { overflow-x: auto; margin-top: 12px; border-radius: 8px; border: 1px solid var(--border2); }
 .po-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.po-table th { background: #1A3A5C; color: white; padding: 8px 10px; text-align: center; white-space: nowrap; }
-.po-table td { padding: 6px 8px; border-bottom: 1px solid #EBF5FB; vertical-align: middle; }
-.po-table tr:hover td { background: #F7FAFC; }
+.po-table th {
+  background: var(--surface3); color: var(--text2);
+  padding: 8px 10px; text-align: center; white-space: nowrap;
+  font-size: 10px; letter-spacing: 0.07em; text-transform: uppercase;
+  border-bottom: 1px solid var(--border2);
+}
+.po-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.po-table tbody tr:last-child td { border-bottom: none; }
+.po-table tr:hover td { background: var(--surface2); }
 .po-table .name-col { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.po-table select { padding: 3px 6px; border: 1.5px solid #E2E8F0; border-radius: 6px; font-size: 12px; font-family: inherit; cursor: pointer; }
-.po-table select.reason-단종   { background: #FDEDEC; border-color: #E74C3C; color: #C0392B; }
-.po-table select.reason-인상   { background: #FEF9E7; border-color: #F39C12; color: #B7770D; }
-.po-table select.reason-품절   { background: #EBF5FB; border-color: #2E6DA4; color: #1A3A5C; }
-.po-table .no-match { color: #E74C3C; font-weight: 700; }
-.po-summary { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
-.po-summary .chip { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-.chip-total   { background: #EBF5FB; color: #1A3A5C; }
-.chip-exclude { background: #FDEDEC; color: #C0392B; }
-.chip-nomatch { background: #FEF9E7; color: #B7770D; }
-.chip-send    { background: #EAFAF1; color: #1A6B40; }
-.dl-btn { width: 100%; padding: 11px; border: 2px solid #1A3A5C; border-radius: 10px; background: white; color: #1A3A5C; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; font-family: inherit; margin-top: 8px; }
-.dl-btn:hover { background: #EBF5FB; }
+.po-table select {
+  padding: 3px 6px; border: 1px solid var(--border2); border-radius: 5px;
+  font-size: 11px; font-family: inherit; cursor: pointer;
+  background: var(--surface2); color: var(--text); transition: border-color 0.15s;
+}
+.po-table select.reason-단종 { background: rgba(255,71,87,0.12);  border-color: var(--danger);  color: #FF8A95; }
+.po-table select.reason-인상 { background: rgba(255,176,32,0.12); border-color: var(--warning); color: #FFD070; }
+.po-table select.reason-품절 { background: rgba(59,158,235,0.12); border-color: var(--info);    color: #7BC4F5; }
+.po-table .no-match { color: var(--danger); font-weight: 700; font-family: 'JetBrains Mono', monospace; }
 
-.stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-top: 14px; }
-.stat { border-radius: 10px; padding: 13px; text-align: center; }
-.stat.s1 { background:#EBF5FB; } .stat.s1 .n { color:#1A3A5C; }
-.stat.s2 { background:#EAFAF1; } .stat.s2 .n { color:#1A6B40; }
-.stat.s3 { background:#FEF9E7; } .stat.s3 .n { color:#B7950B; }
-.stat .n { font-size: 24px; font-weight: 800; }
-.stat .l { font-size: 11px; color: #718096; margin-top: 2px; }
+.po-summary { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.po-summary .chip { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; border: 1px solid; }
+.chip-total   { background: rgba(106,143,173,0.12); border-color: var(--border2); color: var(--text2); }
+.chip-exclude { background: rgba(255,71,87,0.1);    border-color: rgba(255,71,87,0.3);  color: #FF8A95; }
+.chip-nomatch { background: rgba(255,176,32,0.1);   border-color: rgba(255,176,32,0.3); color: #FFD070; }
+.chip-send    { background: rgba(0,194,122,0.1);    border-color: rgba(0,194,122,0.3);  color: #4DDDAA; }
 
-.log-box { background: #1C2833; border-radius: 10px; padding: 14px; min-height: 100px; max-height: 220px; overflow-y: auto; font-family: Consolas, monospace; font-size: 12px; }
-.ll { padding: 2px 0; }
-.li { color: #A9B7C6; } .lo { color: #6FCF97; } .lw { color: #F2C94C; } .le { color: #EB5757; }
-.hidden { display: none; }
+/* ── 로그 박스 ── */
+.log-box {
+  background: #04080F; border: 1px solid var(--border2);
+  border-radius: 8px; padding: 12px 14px;
+  min-height: 90px; max-height: 200px; overflow-y: auto;
+  font-family: 'JetBrains Mono', Consolas, monospace; font-size: 11px;
+}
+.log-box::-webkit-scrollbar { width: 4px; }
+.log-box::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+.ll { padding: 2px 0; line-height: 1.6; }
+.ll::before { content: '› '; color: var(--text3); }
+.li { color: var(--text2); } .lo { color: var(--success); }
+.lw { color: var(--warning); } .le { color: var(--danger); }
+
+.hidden { display: none !important; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>📦 바코드 자동 매칭 프로그램</h1>
-  <p>PO 파일 바코드→상품코드 변환 | 주문서 품목코드→바코드 채우기</p>
+  <div class="header-accent"></div>
+  <div class="header-text">
+    <h1><span>LINEUP</span> ERP BRIDGE</h1>
+    <p>쿠팡 PO → 이카운트 판매 전표 자동 전송 · 라인업시스템(주)</p>
+  </div>
+  <div class="header-right">
+    <div class="master-status" id="masterStatus">연결 확인 중...</div>
+    <div class="header-badge">v2.0</div>
+  </div>
 </header>
 
-<div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('po', this)">📋 PO 파일 처리</button>
-  <button class="tab-btn"        onclick="switchTab('order', this)">🛒 주문서 바코드 채우기</button>
-  <button class="tab-btn"        onclick="switchTab('ecount', this)">📤 이카운트 전송</button>
-</div>
-
-
-<!-- ══════════════ PO 탭 ══════════════ -->
-<div class="tab-pane active" id="tab-po">
 <div class="container">
-
-  <div class="card">
-    <div class="card-title"><span class="badge">✓</span> 마스터 데이터</div>
-    <div class="info-bar">📋 &nbsp;<span id="poMasterInfo">서버 연결 확인 중...</span></div>
-  </div>
 
   <div class="card">
     <div class="card-title"><span class="badge">1</span> PO 파일 선택</div>
-    <div class="upload-zone" id="poZone" onclick="document.getElementById('poFileInput').click()">
-      <div class="icon">📂</div>
-      <strong>PO 파일을 클릭하거나 드래그하세요</strong>
-      <p>엑셀 파일 (.xlsx, .xls) | 여러 파일 동시 가능</p>
+    <div class="info-bar" style="margin-bottom:14px;">
+      📋 &nbsp;<strong>PO_로 시작하는 파일</strong>을 올리면 바코드→품목코드 변환, 물류센터 ㄱ~ㅎ 정렬 후 이카운트에 자동 전송됩니다.
     </div>
-    <input type="file" id="poFileInput" accept=".xlsx,.xls" multiple style="display:none">
-    <div id="poFileList" style="margin-top:8px;"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><span class="badge">2</span> 설정</div>
-    <div class="grid2">
-      <div class="field">
-        <label>상품바코드 열 이름</label>
-        <input type="text" id="poBarcodeCol" value="상품바코드">
-      </div>
-      <div class="field">
-        <label>추가할 상품코드 열 이름</label>
-        <input type="text" id="poCodeCol" value="상품코드">
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><span class="badge">3</span> 실행</div>
-    <button class="run-btn" id="poRunBtn" onclick="runPO()" disabled>▶&nbsp; 상품코드 변환 후 다운로드</button>
-    <div class="stats hidden" id="poStats">
-      <div class="stat s1"><div class="n" id="poT">0</div><div class="l">전체</div></div>
-      <div class="stat s2"><div class="n" id="poM">0</div><div class="l">변환됨</div></div>
-      <div class="stat s3"><div class="n" id="poN">0</div><div class="l">미매칭</div></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><span class="badge">✦</span> 처리 로그</div>
-    <div class="log-box" id="poLog"></div>
-  </div>
-
-</div>
-</div>
-
-
-<!-- ══════════════ 주문서 탭 ══════════════ -->
-<div class="tab-pane" id="tab-order">
-<div class="container">
-
-  <div class="card">
-    <div class="card-title"><span class="badge">✓</span> 마스터 데이터</div>
-    <div class="info-bar">📋 &nbsp;<span id="ordMasterInfo">서버 연결 확인 중...</span></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><span class="badge">1</span> 주문서 파일 선택</div>
-    <div class="upload-zone" id="ordZone" onclick="document.getElementById('ordFileInput').click()">
-      <div class="icon">📂</div>
-      <strong>주문서 파일을 클릭하거나 드래그하세요</strong>
-      <p>엑셀 파일 (.xlsx, .xls)</p>
-    </div>
-    <input type="file" id="ordFileInput" accept=".xlsx,.xls" style="display:none">
-    <div id="ordFileTag" style="margin-top:8px;"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><span class="badge">2</span> 열 설정</div>
-    <div class="grid3">
-      <div class="field">
-        <label>품목코드 열 이름</label>
-        <input type="text" id="ordCodeCol" value="품목코드">
-      </div>
-      <div class="field">
-        <label>바코드를 채울 열 이름</label>
-        <input type="text" id="ordBarcodeCol" value="lineup11 바코드">
-      </div>
-      <div class="field">
-        <label>헤더 행 번호</label>
-        <input type="number" id="ordHeaderRow" value="1" min="1" max="10">
-      </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><span class="badge">3</span> 실행</div>
-    <button class="run-btn" id="ordRunBtn" onclick="runOrder()" disabled>▶&nbsp; 바코드 자동 채우기</button>
-    <div class="stats hidden" id="ordStats">
-      <div class="stat s1"><div class="n" id="ordT">0</div><div class="l">전체</div></div>
-      <div class="stat s2"><div class="n" id="ordM">0</div><div class="l">채워짐</div></div>
-      <div class="stat s3"><div class="n" id="ordN">0</div><div class="l">미매칭</div></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><span class="badge">✦</span> 처리 로그</div>
-    <div class="log-box" id="ordLog"></div>
-  </div>
-
-</div>
-</div>
-
-
-<!-- ══════════════ 이카운트 탭 ══════════════ -->
-<div class="tab-pane" id="tab-ecount">
-<div class="container">
-
-  <div class="card">
-    <div class="card-title"><span class="badge">ℹ</span> 안내</div>
-    <div class="info-bar">📋 &nbsp;<strong>PO_로 시작하는 파일</strong>을 올리면 바코드→품목코드 변환, 물류센터 ㄱ~ㅎ 정렬 후 이카운트에 자동 전송됩니다.</div>
-  </div>
-
-  <div class="card">
-    <div class="card-title"><span class="badge">1</span> PO 파일 선택</div>
     <div class="upload-zone" id="ecountZone" onclick="document.getElementById('ecountFileInput').click()">
       <div class="icon">📂</div>
       <strong>PO_ 파일을 클릭하거나 드래그하세요</strong>
@@ -228,10 +281,13 @@ header p  { font-size: 12px; opacity: 0.75; margin-top: 3px; }
   </div>
 
   <div class="card hidden" id="poPreviewCard">
-    <div class="card-title"><span class="badge">2</span> 납품부족사유 선택 <span style="font-size:11px;color:#718096;font-weight:400;">(제품단종/제품인상은 이카운트 전송 제외)</span></div>
+    <div class="card-title">
+      <span class="badge">2</span> 납품부족사유 선택
+      <span style="font-size:10px;color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;">(제품단종/제품인상은 이카운트 전송 제외)</span>
+    </div>
     <div class="po-summary" id="poSummary"></div>
     <div class="po-table-wrap">
-      <table class="po-table" id="poTable">
+      <table class="po-table">
         <thead>
           <tr>
             <th>#</th><th>물류센터</th><th>발주번호</th><th>상품이름</th>
@@ -252,13 +308,13 @@ header p  { font-size: 12px; opacity: 0.75; margin-top: 3px; }
       </div>
       <div class="field">
         <label>거래처코드 (고정)</label>
-        <input type="text" value="202308091" disabled style="background:#F7FAFC;color:#718096;">
+        <input type="text" value="202308091" disabled>
       </div>
     </div>
     <div class="grid2" style="margin-top:10px;">
       <div class="field">
         <label>출하창고 (고정)</label>
-        <input type="text" value="30" disabled style="background:#F7FAFC;color:#718096;">
+        <input type="text" value="30" disabled>
       </div>
       <div class="field">
         <label>판매일자</label>
@@ -268,10 +324,18 @@ header p  { font-size: 12px; opacity: 0.75; margin-top: 3px; }
   </div>
 
   <div class="card">
-    <div class="card-title"><span class="badge">4</span> 이카운트 전송 / 파일 다운로드</div>
+    <div class="card-title"><span class="badge">4</span> 전송 / 다운로드</div>
     <button class="ecount-btn" id="ecountSendBtn" onclick="sendToEcount()" disabled>📤&nbsp; 이카운트 판매 전표 등록</button>
     <button class="dl-btn hidden" id="dlPoBtn" onclick="downloadPO()">⬇&nbsp; 납품부족사유 채운 PO 파일 다운로드</button>
     <div class="ecount-result hidden" id="ecountResult"></div>
+    <div class="inv-table-wrap hidden" id="invTableWrap">
+      <table class="inv-table">
+        <thead>
+          <tr><th>전표순번</th><th>물류센터 - 발주번호</th><th>품목코드</th><th>전송수량</th><th>현재재고</th></tr>
+        </thead>
+        <tbody id="invTableBody"></tbody>
+      </table>
+    </div>
   </div>
 
   <div class="card">
@@ -280,183 +344,40 @@ header p  { font-size: 12px; opacity: 0.75; margin-top: 3px; }
   </div>
 
 </div>
-</div>
 
 
 <script>
-// ── 탭 전환 ─────────────────────────────────
-function switchTab(name, btn) {
-  document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active"));
-  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-  document.getElementById("tab-" + name).classList.add("active");
-  btn.classList.add("active");
-}
-
-// ── 마스터 정보 로드 ────────────────────────
 window.onload = async () => {
-  setupDrop("poZone",     "poFileInput",     handlePOFiles);
-  setupDrop("ordZone",    "ordFileInput",    files => handleOrderFile(files[0]));
   setupDrop("ecountZone", "ecountFileInput", files => handleEcountFile(files[0]));
-  document.getElementById("poFileInput").addEventListener("change",     e => { if (e.target.files.length) handlePOFiles(Array.from(e.target.files)); });
-  document.getElementById("ordFileInput").addEventListener("change",    e => { if (e.target.files[0]) handleOrderFile(e.target.files[0]); });
-  document.getElementById("ecountFileInput").addEventListener("change", e => { if (e.target.files[0]) handleEcountFile(e.target.files[0]); });
+  document.getElementById("ecountFileInput").addEventListener("change", e => {
+    if (e.target.files[0]) handleEcountFile(e.target.files[0]);
+  });
 
-  // 오늘 날짜를 기본값으로 설정
   const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm   = String(today.getMonth()+1).padStart(2,"0");
-  const dd   = String(today.getDate()).padStart(2,"0");
-  document.getElementById("ioDate").value = `${yyyy}-${mm}-${dd}`;
+  document.getElementById("ioDate").value =
+    `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
 
   try {
     const res  = await fetch("/api/master-info");
     const data = await res.json();
-    document.getElementById("poMasterInfo").textContent  = `바코드→상품코드 ${data.po_count.toLocaleString()}개 매핑 로드 완료`;
-    document.getElementById("ordMasterInfo").textContent = `품목코드→바코드 ${data.order_count.toLocaleString()}개 (바코드 있음: ${data.order_with_barcode.toLocaleString()}개)`;
+    document.getElementById("masterStatus").textContent =
+      `매핑 ${data.po_count.toLocaleString()}개 · 단종 ${data.discontinued_count ?? 0}개 · 매입가인상 ${data.price_up_count ?? 0}개`;
   } catch {
-    document.getElementById("poMasterInfo").textContent  = "⚠ 서버 연결 실패 – main.py를 먼저 실행하세요";
-    document.getElementById("ordMasterInfo").textContent = "⚠ 서버 연결 실패 – main.py를 먼저 실행하세요";
+    document.getElementById("masterStatus").textContent = "⚠ 서버 연결 실패";
+    document.getElementById("masterStatus").style.color = "var(--danger)";
   }
 };
 
 function setupDrop(zoneId, inputId, handler) {
   const zone = document.getElementById(zoneId);
   zone.addEventListener("dragover",  e => { e.preventDefault(); zone.classList.add("drag-over"); });
-  zone.addEventListener("dragleave", ()=> zone.classList.remove("drag-over"));
+  zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
   zone.addEventListener("drop", e => {
     e.preventDefault(); zone.classList.remove("drag-over");
     handler(Array.from(e.dataTransfer.files));
   });
 }
 
-// ══════════════════════════════════════
-// PO 탭
-// ══════════════════════════════════════
-let poFiles = [];
-
-function handlePOFiles(files) {
-  poFiles = files;
-  document.getElementById("poFileList").innerHTML =
-    files.map(f => `<span class="file-tag">📄 ${f.name}</span>`).join("") +
-    (files.length > 1 ? `<div style="font-size:12px;color:#718096;margin-top:6px;">총 ${files.length}개</div>` : "");
-  document.getElementById("poRunBtn").disabled  = false;
-  document.getElementById("ecountBtn").disabled = false;
-  plog(`파일 ${files.length}개 선택됨`, "o");
-}
-
-async function runPO() {
-  if (!poFiles.length) return alert("파일을 선택하세요.");
-  const barcodeCol = document.getElementById("poBarcodeCol").value.trim();
-  const codeCol    = document.getElementById("poCodeCol").value.trim();
-  const btn        = document.getElementById("poRunBtn");
-  btn.disabled = true; btn.textContent = "⏳ 서버에서 처리 중...";
-
-  let totalAll = 0, matchedAll = 0, missedAll = 0;
-
-  for (const file of poFiles) {
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("barcodeCol", barcodeCol);
-    fd.append("codeCol",    codeCol);
-
-    try {
-      plog(`🚀 전송 중: ${file.name}`, "i");
-      const res = await fetch("/api/process-po", { method: "POST", body: fd });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "서버 오류"); }
-
-      totalAll   += parseInt(res.headers.get("X-Total")   || 0);
-      matchedAll += parseInt(res.headers.get("X-Matched") || 0);
-      missedAll  += parseInt(res.headers.get("X-Missed")  || 0);
-
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = Object.assign(document.createElement("a"), { href: url, download: file.name.replace(/\.xlsx?$/, "") + "_상품코드.xlsx" });
-      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-
-      plog(`✅ 완료: ${file.name}`, "o");
-    } catch(err) {
-      plog(`❌ ${file.name}: ${err.message}`, "e");
-    }
-  }
-
-  document.getElementById("poT").textContent = totalAll;
-  document.getElementById("poM").textContent = matchedAll;
-  document.getElementById("poN").textContent = missedAll;
-  document.getElementById("poStats").classList.remove("hidden");
-  plog(`─── 전체 ${totalAll}개 | 변환 ${matchedAll}개 | 미매칭 ${missedAll}개`, "o");
-  btn.disabled = false; btn.textContent = "▶ 상품코드 변환 실행 (재실행)";
-}
-
-function plog(msg, t = "i") {
-  const box = document.getElementById("poLog");
-  const d = document.createElement("div");
-  d.className = `ll l${t}`; d.textContent = msg;
-  box.appendChild(d); box.scrollTop = box.scrollHeight;
-}
-
-// ══════════════════════════════════════
-// 주문서 탭
-// ══════════════════════════════════════
-let ordFile = null;
-
-function handleOrderFile(file) {
-  ordFile = file;
-  document.getElementById("ordFileTag").innerHTML = `<span class="file-tag">📄 ${file.name}</span>`;
-  document.getElementById("ordRunBtn").disabled = false;
-  olog(`파일 선택됨: ${file.name}`, "o");
-}
-
-async function runOrder() {
-  if (!ordFile) return alert("파일을 선택하세요.");
-  const codeCol    = document.getElementById("ordCodeCol").value.trim();
-  const barcodeCol = document.getElementById("ordBarcodeCol").value.trim();
-  const headerRow  = document.getElementById("ordHeaderRow").value;
-  const btn        = document.getElementById("ordRunBtn");
-  btn.disabled = true; btn.textContent = "⏳ 서버에서 처리 중...";
-
-  const fd = new FormData();
-  fd.append("file",       ordFile);
-  fd.append("codeCol",    codeCol);
-  fd.append("barcodeCol", barcodeCol);
-  fd.append("headerRow",  headerRow);
-
-  try {
-    olog(`🚀 전송 중: ${ordFile.name}`, "i");
-    const res = await fetch("/api/process-order", { method: "POST", body: fd });
-    if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "서버 오류"); }
-
-    const total   = parseInt(res.headers.get("X-Total")   || 0);
-    const matched = parseInt(res.headers.get("X-Matched") || 0);
-    const missed  = parseInt(res.headers.get("X-Missed")  || 0);
-
-    document.getElementById("ordT").textContent = total;
-    document.getElementById("ordM").textContent = matched;
-    document.getElementById("ordN").textContent = missed;
-    document.getElementById("ordStats").classList.remove("hidden");
-
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = Object.assign(document.createElement("a"), { href: url, download: ordFile.name.replace(/\.xlsx?$/, "") + "_바코드.xlsx" });
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-
-    olog(`✅ 완료: 전체 ${total}개 | 바코드 채워짐 ${matched}개 | 미매칭 ${missed}개`, "o");
-  } catch(err) {
-    olog(`❌ 오류: ${err.message}`, "e");
-  }
-
-  btn.disabled = false; btn.textContent = "▶ 바코드 자동 채우기 (재실행)";
-}
-
-function olog(msg, t = "i") {
-  const box = document.getElementById("ordLog");
-  const d = document.createElement("div");
-  d.className = `ll l${t}`; d.textContent = msg;
-  box.appendChild(d); box.scrollTop = box.scrollHeight;
-}
-
-// ══════════════════════════════════════
-// 이카운트 탭
-// ══════════════════════════════════════
 let ecountFile = null;
 
 async function handleEcountFile(file) {
@@ -464,7 +385,6 @@ async function handleEcountFile(file) {
   document.getElementById("ecountFileTag").innerHTML = `<span class="file-tag">📄 ${file.name}</span>`;
   elog(`파일 선택됨: ${file.name} — 항목 분석 중...`, "i");
 
-  // 파일 미리보기 로드
   const fd = new FormData();
   fd.append("file", file);
   try {
@@ -490,16 +410,15 @@ function renderPreviewTable(items) {
   ];
   const tbody = document.getElementById("poTableBody");
   tbody.innerHTML = "";
-
   items.forEach(item => {
     const tr = document.createElement("tr");
     const opts = REASONS.map(r =>
       `<option value="${r.value}" ${item.사유===r.value?"selected":""}>${r.label}</option>`
     ).join("");
     tr.innerHTML = `
-      <td style="text-align:center;color:#718096">${item.idx+1}</td>
+      <td style="text-align:center;color:var(--text3)">${item.idx+1}</td>
       <td style="white-space:nowrap">${item.물류센터}</td>
-      <td style="white-space:nowrap;font-size:11px">${item.발주번호}</td>
+      <td style="white-space:nowrap;font-size:11px;font-family:'JetBrains Mono',monospace">${item.발주번호}</td>
       <td class="name-col" title="${item.상품이름}">${item.상품이름}</td>
       <td style="text-align:center">${item.발주수량}</td>
       <td style="text-align:center">${item.확정수량}</td>
@@ -531,8 +450,7 @@ function updateSummary() {
     total++;
     if (s.value.startsWith("제품 단종") || s.value.startsWith("제품 인상")) exclude++;
   });
-  // no-match count from table
-  document.querySelectorAll("#poTableBody .no-match").forEach(()=>nomatch++);
+  document.querySelectorAll("#poTableBody .no-match").forEach(() => nomatch++);
   const send = total - exclude;
   document.getElementById("poSummary").innerHTML = `
     <span class="chip chip-total">전체 ${total}건</span>
@@ -552,7 +470,6 @@ function getShortageReasons() {
 
 async function sendToEcount() {
   if (!ecountFile) return alert("파일을 선택하세요.");
-
   const btn       = document.getElementById("ecountSendBtn");
   const resultDiv = document.getElementById("ecountResult");
 
@@ -563,6 +480,7 @@ async function sendToEcount() {
   const staffCode = document.getElementById("staffCode").value.trim();
   const ioDateRaw = document.getElementById("ioDate").value;
   const ioDate    = ioDateRaw ? ioDateRaw.replace(/-/g, "") : "";
+
   const fd = new FormData();
   fd.append("file",             ecountFile);
   fd.append("staff_code",       staffCode);
@@ -572,10 +490,11 @@ async function sendToEcount() {
   try {
     const res  = await fetch("/api/send-to-ecount", { method: "POST", body: fd });
     const data = await res.json();
-
     if (!res.ok) throw new Error(data.detail || "서버 오류");
 
-    const isOk = String(data.status) === "200" && data.fail === 0;
+    const isOk   = String(data.status) === "200" && data.fail === 0;
+    const lowCnt = (data.items_result || []).filter(r => r.low_stock).length;
+
     resultDiv.className = `ecount-result ${isOk ? "success" : "fail"}`;
     resultDiv.innerHTML = `
       <strong>${isOk ? "✅ 전표 등록 완료!" : "⚠️ 일부 실패"}</strong><br>
@@ -583,13 +502,17 @@ async function sendToEcount() {
       ${data.slip_nos?.length ? `<br>전표번호: <strong>${data.slip_nos.join(", ")}</strong>` : ""}
       ${data.excluded  > 0 ? `<br>🚫 제외(제품단종/제품인상): ${data.excluded}건` : ""}
       ${data.unmatched > 0 ? `<br>⚠ 바코드 미매칭 ${data.unmatched}건 (미전송)` : ""}
-      ${data.errors?.length ? `<br><span style="color:#E74C3C">${data.errors.join("<br>")}</span>` : ""}
+      ${lowCnt         > 0 ? `<br>🔴 재고 부족 품목: <strong>${lowCnt}건</strong>` : ""}
+      ${!data.inv_checked  ? `<br><span style="color:var(--text3);font-size:11px">※ 재고 조회 실패 (전표는 정상 등록됨)</span>` : ""}
+      ${data.errors?.length ? `<br><span style="color:var(--danger)">${data.errors.join("<br>")}</span>` : ""}
     `;
     resultDiv.classList.remove("hidden");
+    renderInvTable(data.items_result || []);
 
     elog(`${isOk ? "✅" : "⚠️"} 결과 - 성공:${data.success} 실패:${data.fail}`, isOk ? "o" : "w");
     if (data.slip_nos?.length) elog(`전표번호: ${data.slip_nos.join(", ")}`, "o");
-    if (data.errors?.length)  data.errors.forEach(e => elog(`❌ ${e}`, "e"));
+    if (lowCnt > 0)            elog(`🔴 재고 부족 ${lowCnt}건 확인 필요`, "w");
+    if (data.errors?.length)   data.errors.forEach(e => elog(`❌ ${e}`, "e"));
 
   } catch(err) {
     resultDiv.className = "ecount-result fail";
@@ -599,6 +522,30 @@ async function sendToEcount() {
   }
 
   btn.disabled = false; btn.textContent = "📤 이카운트 판매 전표 등록";
+}
+
+function renderInvTable(items) {
+  const wrap  = document.getElementById("invTableWrap");
+  const tbody = document.getElementById("invTableBody");
+  tbody.innerHTML = "";
+  if (!items.length) { wrap.classList.add("hidden"); return; }
+
+  items.forEach(item => {
+    const tr = document.createElement("tr");
+    if (item.low_stock) tr.classList.add("low-stock");
+    const balHtml = item.bal_qty === null
+      ? `<span style="color:var(--text3)">-</span>`
+      : `<span class="${item.low_stock ? 'inv-qty-bad' : 'inv-qty-ok'}">${item.bal_qty}</span>`;
+    tr.innerHTML = `
+      <td>${item.upload_ser_no}</td>
+      <td style="text-align:left;white-space:nowrap">${item.remarks}</td>
+      <td style="font-weight:600;font-family:'JetBrains Mono',monospace">${item.prod_cd}</td>
+      <td>${item.qty}</td>
+      <td>${balHtml}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  wrap.classList.remove("hidden");
 }
 
 async function downloadPO() {
@@ -616,8 +563,7 @@ async function downloadPO() {
     const blob = await res.blob();
     const url  = URL.createObjectURL(blob);
     const a    = Object.assign(document.createElement("a"), {
-      href: url,
-      download: ecountFile.name.replace(".xlsx", "_납품부족사유.xlsx")
+      href: url, download: ecountFile.name.replace(".xlsx", "_납품부족사유.xlsx")
     });
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
     elog("✅ PO 파일 다운로드 완료", "o");
@@ -629,7 +575,7 @@ async function downloadPO() {
 
 function elog(msg, t = "i") {
   const box = document.getElementById("ecountLog");
-  const d = document.createElement("div");
+  const d   = document.createElement("div");
   d.className = `ll l${t}`; d.textContent = msg;
   box.appendChild(d); box.scrollTop = box.scrollHeight;
 }

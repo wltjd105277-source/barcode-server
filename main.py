@@ -81,11 +81,16 @@ def load_master():
         print(f"❌ master_data.xlsx 없음: {MASTER_PATH}")
         return barcode_to_code, code_to_barcode, discontinued, price_up
 
-    xl = pd.ExcelFile(MASTER_PATH)
+    # 파일을 메모리에 한 번에 읽고 즉시 닫아 Windows 파일 잠금 방지
+    with open(MASTER_PATH, "rb") as f:
+        raw = io.BytesIO(f.read())
+
+    xl = pd.ExcelFile(raw)
 
     # PO 매핑
     po_sheet = "PO매핑" if "PO매핑" in xl.sheet_names else xl.sheet_names[0]
-    df_po = pd.read_excel(MASTER_PATH, sheet_name=po_sheet, dtype=str)
+    raw.seek(0)
+    df_po = pd.read_excel(raw, sheet_name=po_sheet, dtype=str)
     df_po.columns = df_po.columns.str.strip()
     if "바코드" in df_po.columns and "상품코드" in df_po.columns:
         df_po["바코드"]   = df_po["바코드"].fillna("").str.strip().str.replace(r"\.0$", "", regex=True)
@@ -99,7 +104,8 @@ def load_master():
 
     # 주문서 매핑
     if "주문서매핑" in xl.sheet_names:
-        df_ord = pd.read_excel(MASTER_PATH, sheet_name="주문서매핑", dtype=str)
+        raw.seek(0)
+        df_ord = pd.read_excel(raw, sheet_name="주문서매핑", dtype=str)
         df_ord.columns = df_ord.columns.str.strip()
         if "품목코드" in df_ord.columns and "lineup11 바코드" in df_ord.columns:
             df_ord["품목코드"]        = df_ord["품목코드"].fillna("").str.strip()
@@ -114,7 +120,8 @@ def load_master():
 
     # 단종 목록 (바코드 or 품목코드)
     if "단종" in xl.sheet_names:
-        df_d = pd.read_excel(MASTER_PATH, sheet_name="단종", dtype=str).fillna("")
+        raw.seek(0)
+        df_d = pd.read_excel(raw, sheet_name="단종", dtype=str).fillna("")
         df_d.columns = df_d.columns.str.strip()
         for col in ["바코드", "품목코드"]:
             if col in df_d.columns:
@@ -124,7 +131,8 @@ def load_master():
 
     # 매입가인상 목록
     if "매입가인상" in xl.sheet_names:
-        df_p = pd.read_excel(MASTER_PATH, sheet_name="매입가인상", dtype=str).fillna("")
+        raw.seek(0)
+        df_p = pd.read_excel(raw, sheet_name="매입가인상", dtype=str).fillna("")
         df_p.columns = df_p.columns.str.strip()
         for col in ["바코드", "품목코드"]:
             if col in df_p.columns:
@@ -459,6 +467,33 @@ async def send_to_ecount(
         resp = await client.post(sale_url, json={"SaleList": bulk_list})
         result = resp.json()
 
+        # ⑦ 재고 조회 (전송 직후 같은 세션으로 조회)
+        inv_map: dict = {}
+        try:
+            inv_url = (
+                f"https://oapi{zone.lower()}.ecount.com/OAPI/V2/"
+                f"InventoryBalance/GetListInventoryBalanceStatusByLocation"
+                f"?SESSION_ID={session_id}"
+            )
+            inv_resp = await client.post(inv_url, json={
+                "BASE_DATE": today,
+                "WH_CD":    "30",
+                "PROD_CD":  "",
+            })
+            inv_data = inv_resp.json()
+            print(f"📊 재고 조회: Status={inv_data.get('Status')}, "
+                  f"TotalCnt={((inv_data.get('Data') or {}).get('TotalCnt', 0))}")
+            for r in ((inv_data.get("Data") or {}).get("Result") or []):
+                pc  = str(r.get("PROD_CD", "")).strip()
+                try:
+                    bq = float(str(r.get("BAL_QTY", "0") or "0"))
+                except Exception:
+                    bq = 0.0
+                if pc:
+                    inv_map[pc] = bq
+        except Exception as e:
+            print(f"⚠️ 재고 조회 실패: {e}")
+
     print(f"📨 이카운트 응답: {result}")
 
     status   = result.get("Status")
@@ -471,15 +506,33 @@ async def send_to_ecount(
         if not rd.get("IsSuccess"):
             errors.append(rd.get("TotalError", ""))
 
+    # ⑧ 항목별 재고 현황 구성
+    items_result = []
+    for item in bulk_list:
+        bd       = item["BulkDatas"]
+        prod_cd  = bd["PROD_CD"]
+        bal_qty  = inv_map.get(prod_cd, None)
+        low      = (bal_qty is not None) and (bal_qty <= 0)
+        items_result.append({
+            "upload_ser_no": bd["UPLOAD_SER_NO"],
+            "remarks":       bd["U_MEMO5"],   # "물류센터 - 발주번호"
+            "prod_cd":       prod_cd,
+            "qty":           bd["QTY"],
+            "bal_qty":       round(bal_qty) if bal_qty is not None else None,
+            "low_stock":     low,
+        })
+
     return JSONResponse(content={
-        "status":    status,
-        "total":     len(bulk_list),
-        "success":   success,
-        "fail":      fail,
-        "slip_nos":  slip_nos,
-        "errors":    errors,
-        "unmatched": unmatched,
-        "excluded":  excluded_cnt,
+        "status":       status,
+        "total":        len(bulk_list),
+        "success":      success,
+        "fail":         fail,
+        "slip_nos":     slip_nos,
+        "errors":       errors,
+        "unmatched":    unmatched,
+        "excluded":     excluded_cnt,
+        "items_result": items_result,
+        "inv_checked":  len(inv_map) > 0,
     })
 
 
